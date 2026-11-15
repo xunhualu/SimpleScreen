@@ -58,7 +58,8 @@ OutputBaseFilename=SimpleScreen-Setup-{#MyAppVersion}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
-SetupIconFile=..\ScreenSound\app.ico  ; source project folder kept its original name
+; source project folder kept its original name
+SetupIconFile=..\ScreenSound\app.ico
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
