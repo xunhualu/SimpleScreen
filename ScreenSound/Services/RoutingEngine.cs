@@ -44,8 +44,25 @@ public class RoutingEngine : IDisposable
     private WinEventHook? _moveResizeHook;
     private AudioSessionNotifier? _sessionNotifier;
 
-    // Track last-routed device per PID to avoid redundant COM calls
-    private readonly ConcurrentDictionary<uint, string> _lastRoutedDevice = new();
+    // What we last did to each PID, keyed by process id. Carries *why* the
+    // routing exists (pin vs monitor mapping) so a later cycle can tell
+    // "the window vanished" (hold) apart from "the user removed the pin"
+    // (release) — they look identical when no window can be found.
+    private readonly record struct RoutingState(string DeviceId, bool ByPin);
+
+    private readonly ConcurrentDictionary<uint, RoutingState> _lastRouted = new();
+
+    // Throttles drift repairs (see PerformRoutingCycle). Keyed by PID, stamped
+    // when we last re-applied because the live stream had moved away from the
+    // device we asked for.
+    private static readonly TimeSpan DriftCooldown = TimeSpan.FromSeconds(30);
+    private readonly ConcurrentDictionary<uint, DateTime> _driftFixAt = new();
+
+    // When true, a process whose window can be found on *no* monitor keeps its
+    // current audio device instead of being released back to the Windows
+    // default. This is what stops a hidden call window from making the call
+    // audio jump to another screen's speaker. User-switchable in Settings.
+    private volatile bool _holdWhenWindowHidden = true;
 
     // In-memory mappings pushed from the ViewModel — no disk reads in the hot loop
     private volatile Dictionary<string, string> _mappings = new();
@@ -90,6 +107,17 @@ public class RoutingEngine : IDisposable
     public void UpdateAppOverrides(IDictionary<string, string> overrides)
     {
         _appOverrides = new Dictionary<string, string>(overrides, StringComparer.OrdinalIgnoreCase);
+        Trigger();
+    }
+
+    /// <summary>
+    /// Toggles the "window hidden → keep the audio device" behaviour. Turning it
+    /// on re-evaluates immediately so a currently-hidden app stops being released.
+    /// </summary>
+    public void SetHoldWhenWindowHidden(bool hold)
+    {
+        if (_holdWhenWindowHidden == hold) return;
+        _holdWhenWindowHidden = hold;
         Trigger();
     }
 
@@ -222,7 +250,7 @@ public class RoutingEngine : IDisposable
         signal?.Dispose();
         cts?.Dispose();
 
-        _lastRoutedDevice.Clear();
+        _lastRouted.Clear();
     }
 
     /// <summary>
@@ -296,10 +324,15 @@ public class RoutingEngine : IDisposable
 
         // Clean up stale PIDs
         var activePids = new HashSet<uint>(sessions.Select(s => s.ProcessId));
-        foreach (var pid in _lastRoutedDevice.Keys)
+        foreach (var pid in _lastRouted.Keys)
         {
             if (!activePids.Contains(pid))
-                _lastRoutedDevice.TryRemove(pid, out _);
+                _lastRouted.TryRemove(pid, out _);
+        }
+        foreach (var pid in _driftFixAt.Keys)
+        {
+            if (!activePids.Contains(pid))
+                _driftFixAt.TryRemove(pid, out _);
         }
 
         foreach (var session in sessions)
@@ -310,6 +343,16 @@ public class RoutingEngine : IDisposable
                 // Reset every cycle so removing a pin clears the indicator on the
                 // very next pass even if the session is still alive.
                 session.IsOverridden = false;
+
+                // The device the session is ACTUALLY on right now, captured before
+                // the display bookkeeping further down overwrites AudioDeviceId
+                // with the *target*. _lastRouted only records what we asked for; if
+                // something else moves the stream (the app rebuilding its audio
+                // after its window was hidden, a Windows default-device change,
+                // another router), intent and reality diverge — and comparing
+                // against intent alone left the audio stuck on the wrong screen
+                // until the target itself changed.
+                var actualDeviceId = session.AudioDeviceId;
 
                 // Always detect which monitor the process is on
                 var monitor = _monitorService.GetMonitorForProcess(session.ProcessId);
@@ -327,12 +370,14 @@ public class RoutingEngine : IDisposable
 
                 // Resolve the target device. Per-app pins win over monitor mappings —
                 // a pinned app stays on its chosen device regardless of monitor.
+                bool isPinned = false;
                 string? targetDeviceId = null;
                 if (!string.IsNullOrEmpty(session.ProcessName) &&
                     overrides.TryGetValue(session.ProcessName, out var pinnedDeviceId) &&
                     !string.IsNullOrEmpty(pinnedDeviceId))
                 {
                     targetDeviceId = pinnedDeviceId;
+                    isPinned = true;
                     session.IsOverridden = true;
                 }
                 else if (monitor != null && mappings.Count > 0 &&
@@ -344,15 +389,36 @@ public class RoutingEngine : IDisposable
 
                 if (string.IsNullOrEmpty(targetDeviceId))
                 {
-                    // No rule applies right now. If we previously routed this PID
-                    // (pin removed, monitor mapping cleared, window moved to a
-                    // monitor without a mapping, …), undo our prior per-app
-                    // policy so Windows falls back to the system default. Without
-                    // this, the stale override set by the pin would persist after
-                    // unpinning and audio would stay stuck on the old device.
-                    // TryRemove-first means we only clear once per transition —
-                    // subsequent heartbeat cycles find no cache entry and skip.
-                    if (_lastRoutedDevice.TryRemove(session.ProcessId, out _))
+                    // Nothing applies *right now*. Two very different situations
+                    // that used to be handled identically — and shouldn't be:
+                    //
+                    //  (a) We know where the window is, but that monitor has no
+                    //      mapping, or the user just removed the pin. Release our
+                    //      per-app policy so Windows falls back to the default
+                    //      device (otherwise a stale pin would stick forever).
+                    //
+                    //  (b) We cannot locate the window on ANY monitor: hidden to
+                    //      the tray, minimised, or an app that hides its UI while
+                    //      a call is in progress. Releasing here is exactly what
+                    //      made call audio hop to another screen's speaker, so we
+                    //      leave the existing routing untouched instead.
+                    bool hold = false;
+                    if (monitor == null && _holdWhenWindowHidden)
+                    {
+                        if (!_lastRouted.TryGetValue(session.ProcessId, out var state))
+                        {
+                            // We never routed this PID — nothing to hold, and
+                            // nothing of ours to undo.
+                            continue;
+                        }
+
+                        // A pin the user has since removed must still be released
+                        // even while the window stays hidden, or the pinned device
+                        // would stick around invisibly.
+                        hold = !state.ByPin;
+                    }
+
+                    if (!hold && _lastRouted.TryRemove(session.ProcessId, out _))
                     {
                         try { _routerService.TryClearProcessRouting(session.ProcessId); }
                         catch { /* process may have exited */ }
@@ -367,13 +433,44 @@ public class RoutingEngine : IDisposable
                     session.AudioDeviceName = targetDeviceName;
                 }
 
-                // Skip if already routed to this device
-                if (_lastRoutedDevice.TryGetValue(session.ProcessId, out var lastDevice) && lastDevice == targetDeviceId)
+                // Skip if the session is already where it should be — but refresh
+                // the "why" when a pin and a monitor mapping happen to target the
+                // same device, so a later un-pin still knows what to release.
+                //
+                // Both the recorded intent AND the live device must agree. They
+                // can diverge without us doing anything: an app rebuilding its
+                // audio stream after its window is hidden, a Windows default-device
+                // change, or another router. Trusting the intent alone left the
+                // audio sitting on the wrong screen until the target itself moved.
+                _lastRouted.TryGetValue(session.ProcessId, out var lastRouted);
+                bool intentMatches = lastRouted.DeviceId == targetDeviceId;
+
+                if (intentMatches && actualDeviceId == targetDeviceId)
+                {
+                    if (lastRouted.ByPin != isPinned)
+                        _lastRouted[session.ProcessId] = new RoutingState(targetDeviceId, isPinned);
+                    _driftFixAt.TryRemove(session.ProcessId, out _);
                     continue;
+                }
+
+                if (intentMatches)
+                {
+                    // Drift: we asked for this device, the stream is not on it.
+                    // Re-apply, but rate-limit per process — a lingering duplicate
+                    // session on the old device would otherwise trigger a re-apply
+                    // on every single pass.
+                    if (_driftFixAt.TryGetValue(session.ProcessId, out var lastFix) &&
+                        DateTime.UtcNow - lastFix < DriftCooldown)
+                        continue;
+
+                    _driftFixAt[session.ProcessId] = DateTime.UtcNow;
+                    System.Diagnostics.Debug.WriteLine(
+                        $"RoutingEngine: PID {session.ProcessId} drifted off {targetDeviceId}, re-applying");
+                }
 
                 if (_routerService.TryRouteProcessToDevice(session.ProcessId, targetDeviceId))
                 {
-                    _lastRoutedDevice[session.ProcessId] = targetDeviceId;
+                    _lastRouted[session.ProcessId] = new RoutingState(targetDeviceId, isPinned);
                 }
             }
             catch (Exception ex)
@@ -391,7 +488,7 @@ public class RoutingEngine : IDisposable
     /// </summary>
     public void ResetAllRouting()
     {
-        foreach (var pid in _lastRoutedDevice.Keys.ToList())
+        foreach (var pid in _lastRouted.Keys.ToList())
         {
             try
             {
@@ -402,7 +499,8 @@ public class RoutingEngine : IDisposable
                 // Process may have already exited
             }
         }
-        _lastRoutedDevice.Clear();
+        _lastRouted.Clear();
+        _driftFixAt.Clear();
     }
 
     public void Dispose()

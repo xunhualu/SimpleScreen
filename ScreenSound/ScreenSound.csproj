@@ -14,16 +14,17 @@
     <NoWarn>WFAC010</NoWarn>
 
     <!-- Assembly metadata - shown in file properties & installer -->
-    <Version>2.0.0</Version>
-    <AssemblyVersion>2.0.0.0</AssemblyVersion>
-    <FileVersion>2.0.0.0</FileVersion>
-    <Product>ScreenSound</Product>
-    <AssemblyTitle>ScreenSound</AssemblyTitle>
-    <Authors>twibster</Authors>
-    <Company>twibster</Company>
-    <Description>Sound follows your windows. Per-app audio routing for multi-monitor Windows 11 — each app plays through the speaker paired with the monitor it's on.</Description>
-    <Copyright>Copyright (c) 2026 Omar Omran</Copyright>
-    <RepositoryUrl>https://github.com/twibster/ScreenSound</RepositoryUrl>
+    <Version>2.1.0</Version>
+    <AssemblyVersion>2.1.0.0</AssemblyVersion>
+    <FileVersion>2.1.0.0</FileVersion>
+    <AssemblyName>SimpleScreen</AssemblyName>
+    <Product>SimpleScreen</Product>
+    <AssemblyTitle>SimpleScreen</AssemblyTitle>
+    <Authors>xunhualu</Authors>
+    <Company>xunhualu</Company>
+    <Description>Sound follows your windows. Per-app audio routing for multi-monitor Windows — each app plays through the speaker paired with the monitor it's on. A customized fork of ScreenSound.</Description>
+    <Copyright>Copyright (c) 2026 Omar Omran, xunhualu</Copyright>
+    <RepositoryUrl>https://github.com/xunhualu/SimpleScreen</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
@@ -31,6 +32,8 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="NAudio" Version="2.3.0" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.10" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="WindowsDisplayAPI" Version="1.3.0.13" />
     <PackageReference Include="WPF-UI" Version="2.1.0" />
   </ItemGroup>
 

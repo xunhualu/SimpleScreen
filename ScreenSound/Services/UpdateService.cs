@@ -38,10 +38,17 @@ public abstract record UpdateCheckResult
 /// </summary>
 public class UpdateService
 {
+    // This app's own repository. Every update-related URL (API probe, release
+    // page fallback) is derived from this one slug so the About page, csproj
+    // <RepositoryUrl>, installer.iss MyAppURL and the hyperlinks in
+    // MainWindow.xaml can never drift apart. NOT the upstream ScreenSound repo
+    // we forked from — releases for this build are published here.
+    private const string RepositorySlug = "xunhualu/SimpleScreen";
+
     // Public, unauthenticated endpoint — rate-limited to 60 requests/hour per IP,
     // which is plenty for a user-initiated "check for updates" button.
     private const string LatestReleaseApi =
-        "https://api.github.com/repos/twibster/ScreenSound/releases/latest";
+        $"https://api.github.com/repos/{RepositorySlug}/releases/latest";
 
     // GitHub requires a User-Agent on every request; the product name is also
     // useful in their server logs if we ever need to correlate a rate-limit bug
@@ -53,8 +60,8 @@ public class UpdateService
 
     private static ProductInfoHeaderValue BuildUserAgent()
     {
-        try { return new ProductInfoHeaderValue("ScreenSound", GetInformationalVersion()); }
-        catch { return new ProductInfoHeaderValue("ScreenSound", "1.0"); }
+        try { return new ProductInfoHeaderValue("SimpleScreen", GetInformationalVersion()); }
+        catch { return new ProductInfoHeaderValue("SimpleScreen", "1.0"); }
     }
 
     /// <summary>
@@ -118,7 +125,7 @@ public class UpdateService
             // legally contain characters (/, #, spaces) that would otherwise
             // break the path segment.
             string releaseUrl = release.HtmlUrl ??
-                $"https://github.com/twibster/ScreenSound/releases/tag/{Uri.EscapeDataString(release.TagName)}";
+                $"https://github.com/{RepositorySlug}/releases/tag/{Uri.EscapeDataString(release.TagName)}";
 
             return CompareSemVer(latest, current) > 0
                 ? new UpdateCheckResult.UpdateAvailable(current, latest, releaseUrl)

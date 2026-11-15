@@ -1,4 +1,4 @@
-using ScreenSound.Models;
+﻿using ScreenSound.Models;
 using NAudio.CoreAudioApi;
 using System.Diagnostics;
 
@@ -14,6 +14,9 @@ public class AudioSessionService
         using var enumerator = new MMDeviceEnumerator();
         foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
         {
+            // One COM wrapper per endpoint per routing cycle — don't leak it.
+            using (device)
+            {
             try
             {
                 var sessionManager = device.AudioSessionManager;
@@ -31,7 +34,7 @@ public class AudioSessionService
                     string processName;
                     try
                     {
-                        var process = Process.GetProcessById((int)pid);
+                        using var process = Process.GetProcessById((int)pid);
                         processName = process.ProcessName;
                     }
                     catch
@@ -52,6 +55,7 @@ public class AudioSessionService
             catch
             {
                 // Device may become unavailable during enumeration
+            }
             }
         }
 

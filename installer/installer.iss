@@ -1,4 +1,4 @@
-; Inno Setup script for ScreenSound
+﻿; Inno Setup script for SimpleScreen
 ; Builds a Windows installer that installs to Program Files, creates Start Menu
 ; shortcuts, registers an uninstaller, and launches the app after install.
 ;
@@ -6,10 +6,10 @@
 ; downloads + installs the .NET 8 Desktop Runtime on-demand if missing,
 ; keeping our installer ~10x smaller than a self-contained build.
 
-#define MyAppName "ScreenSound"
-#define MyAppExeName "ScreenSound.exe"
-#define MyAppPublisher "twibster"
-#define MyAppURL "https://github.com/twibster/ScreenSound"
+#define MyAppName "SimpleScreen"
+#define MyAppExeName "SimpleScreen.exe"
+#define MyAppPublisher "xunhualu"
+#define MyAppURL "https://github.com/xunhualu/SimpleScreen"
 
 ; Version comes from the APP_VERSION env var (set by CI). Fallback for local runs.
 #define MyAppVersion GetEnv("APP_VERSION")
@@ -24,7 +24,7 @@
 
 [Setup]
 ; AppId is a GUID that uniquely identifies the app in Windows' uninstall registry.
-; Regenerated for the ScreenSound rebrand (v2.0.0) so the rebranded product gets
+; Originally generated for the ScreenSound v2.0.0 rebrand; kept stable ever so the rebranded product gets
 ; its own identity in Add/Remove Programs rather than silently upgrading an
 ; "Audio Monitor Router" v1 install. Do NOT change this again once v2 has
 ; shipped — changing it would cause future upgrades to install side-by-side
@@ -54,11 +54,11 @@ PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog
 
 OutputDir=Output
-OutputBaseFilename=ScreenSound-Setup-{#MyAppVersion}
+OutputBaseFilename=SimpleScreen-Setup-{#MyAppVersion}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
-SetupIconFile=..\ScreenSound\app.ico
+SetupIconFile=..\ScreenSound\app.ico  ; source project folder kept its original name
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -77,7 +77,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Registry]
 ; Opt-in auto-start via Run key. App's own "Run at startup" setting can override this later.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "ScreenSound"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: startupicon
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SimpleScreen"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: startupicon
 
 [Run]
 ; Silent-install the .NET 8 Desktop Runtime if we had to download it.
@@ -102,7 +102,7 @@ Filename: "{cmd}"; Parameters: "/C taskkill /F /IM {#MyAppExeName}"; Flags: runh
 
 [UninstallDelete]
 ; Remove the per-user settings folder on uninstall
-Type: filesandordirs; Name: "{userappdata}\ScreenSound"
+Type: filesandordirs; Name: "{userappdata}\SimpleScreen"
 
 [Code]
 var

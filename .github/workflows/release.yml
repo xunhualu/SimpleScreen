@@ -86,7 +86,7 @@ jobs:
       - name: Package portable zip
         shell: pwsh
         run: |
-          $zipName = "ScreenSound-${{ steps.version.outputs.VERSION }}-portable.zip"
+          $zipName = "SimpleScreen-${{ steps.version.outputs.VERSION }}-portable.zip"
           Compress-Archive -Path "publish\*" -DestinationPath "publish\$zipName"
           Write-Host "Created $zipName"
 
@@ -100,13 +100,13 @@ jobs:
       - name: Upload portable build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ScreenSound-portable
-          path: publish\ScreenSound-${{ steps.version.outputs.VERSION }}-portable.zip
+          name: SimpleScreen-portable
+          path: publish\SimpleScreen-${{ steps.version.outputs.VERSION }}-portable.zip
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ScreenSound-installer
+          name: SimpleScreen-installer
           path: installer\Output\*.exe
 
       - name: Create GitHub Release
@@ -134,5 +134,5 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            publish/ScreenSound-${{ steps.version.outputs.VERSION }}-portable.zip
+            publish/SimpleScreen-${{ steps.version.outputs.VERSION }}-portable.zip
             installer/Output/*.exe

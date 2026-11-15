@@ -1,4 +1,4 @@
-using ScreenSound.Models;
+﻿using ScreenSound.Models;
 using NAudio.CoreAudioApi;
 
 namespace ScreenSound.Services;
@@ -17,14 +17,19 @@ public class AudioDeviceService : IDisposable
         var devices = new List<AudioDeviceInfo>();
         var defaultDevice = GetDefaultDeviceId();
 
+        // Enumerating without disposing leaks one COM endpoint wrapper per
+        // device per call, and this runs on every device-refresh tick.
         foreach (var device in _enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
         {
-            devices.Add(new AudioDeviceInfo
+            using (device)
             {
-                Id = device.ID,
-                FriendlyName = device.FriendlyName,
-                IsDefault = device.ID == defaultDevice
-            });
+                devices.Add(new AudioDeviceInfo
+                {
+                    Id = device.ID,
+                    FriendlyName = device.FriendlyName,
+                    IsDefault = device.ID == defaultDevice
+                });
+            }
         }
 
         return devices;
@@ -34,7 +39,7 @@ public class AudioDeviceService : IDisposable
     {
         try
         {
-            var defaultDevice = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            using var defaultDevice = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
             return defaultDevice?.ID;
         }
         catch
@@ -49,8 +54,11 @@ public class AudioDeviceService : IDisposable
         {
             foreach (var device in _enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
             {
-                if (device.ID == deviceId)
-                    return device.AudioEndpointVolume.MasterVolumeLevelScalar;
+                using (device)
+                {
+                    if (device.ID == deviceId)
+                        return device.AudioEndpointVolume.MasterVolumeLevelScalar;
+                }
             }
         }
         catch { }
@@ -63,10 +71,13 @@ public class AudioDeviceService : IDisposable
         {
             foreach (var device in _enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
             {
-                if (device.ID == deviceId)
+                using (device)
                 {
-                    device.AudioEndpointVolume.MasterVolumeLevelScalar = Math.Clamp(volume, 0f, 1f);
-                    return;
+                    if (device.ID == deviceId)
+                    {
+                        device.AudioEndpointVolume.MasterVolumeLevelScalar = Math.Clamp(volume, 0f, 1f);
+                        return;
+                    }
                 }
             }
         }

@@ -1,4 +1,5 @@
 using ScreenSound.Interop;
+using ScreenSound.Services;
 using ScreenSound.Views;
 using System.Globalization;
 using System.Threading;
@@ -15,11 +16,28 @@ public partial class App : Application
     // The "Local\" prefix scopes the mutex to the current Windows login
     // session, so fast-user-switching still lets each user have their own
     // copy while a double-click on the shortcut won't spawn a second one.
-    private const string SingleInstanceMutexName = @"Local\ScreenSound-SingleInstance";
+    private const string SingleInstanceMutexName = @"Local\SimpleScreen-SingleInstance";
     private static Mutex? _singleInstanceMutex;
+
+    // Second-instance hand-off. When the mutex is already held, the newcomer
+    // pokes this event instead of showing a dead-end "already running" dialog —
+    // the running copy surfaces its window, which matters a lot when that window
+    // is hidden in the tray or parked on a monitor that has since been unplugged.
+    private const string ActivateEventName = @"Local\SimpleScreen-Activate";
+    private EventWaitHandle? _activateEvent;
+    private RegisteredWaitHandle? _activationWait;
+
+    private MainWindow? _window;
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // Apply the UI language before ANY window or dialog is constructed, so
+        // the app never paints a frame in the wrong language. Passing the raw
+        // saved value lets LocalizationService fall back to the OS UI language
+        // when the settings file predates this feature (empty string).
+        var savedLanguage = new SettingsService().Load().Language;
+        LocalizationService.Apply(savedLanguage);
+
         // Acquire the mutex FIRST, before any side effects (DPI config,
         // window creation, tray icon). If another copy is already running
         // we want to bail out cleanly with zero partial initialisation.
@@ -39,9 +57,20 @@ public partial class App : Application
 
         if (!acquired)
         {
+            // Someone is already running: ask it to show itself, then leave.
+            // Only fall back to the modal dialog when that hand-off fails —
+            // otherwise a minimised-to-tray instance looks unreachable.
+            if (TrySignalRunningInstance())
+            {
+                _singleInstanceMutex.Dispose();
+                _singleInstanceMutex = null;
+                Shutdown();
+                return;
+            }
+
             MessageBox.Show(
-                "ScreenSound is already running — check the system tray.",
-                "ScreenSound",
+                LocalizationService.Get("App_AlreadyRunning"),
+                "SimpleScreen",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
 
@@ -49,6 +78,19 @@ public partial class App : Application
             _singleInstanceMutex = null;
             Shutdown();
             return;
+        }
+
+        // Create the hand-off event as early as possible so a second launch
+        // that races us still finds it.
+        try
+        {
+            _activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName);
+            _activationWait = ThreadPool.RegisterWaitForSingleObject(
+                _activateEvent, OnActivateSignalled, null, Timeout.Infinite, executeOnlyOnce: false);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Activation event unavailable: {ex.Message}");
         }
 
         // Force PerMonitorV2 DPI awareness before WPF creates any windows.
@@ -62,6 +104,7 @@ public partial class App : Application
 
         // Create window manually so we can control visibility
         var window = new MainWindow();
+        _window = window;
         MainWindow = window;
 
         if (!window.ShouldStartMinimized)
@@ -69,6 +112,58 @@ public partial class App : Application
             window.Show();
         }
         // Otherwise, tray icon is already set up — window stays hidden
+    }
+
+    /// <summary>
+    /// Asks the already-running copy to show its window. Returns false when the
+    /// event isn't there (older build, or the other instance is still starting).
+    /// </summary>
+    private static bool TrySignalRunningInstance()
+    {
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            try
+            {
+                if (EventWaitHandle.TryOpenExisting(ActivateEventName, out var handle))
+                {
+                    using (handle)
+                    {
+                        handle.Set();
+                    }
+
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Activation signal failed: {ex.Message}");
+                return false;
+            }
+
+            // The other instance creates the event a hair after taking the
+            // mutex; give it a moment rather than skipping straight to the
+            // dialog.
+            Thread.Sleep(80);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Runs on a pool thread when a second launch asks us to come forward.
+    /// </summary>
+    private void OnActivateSignalled(object? state, bool timedOut)
+    {
+        if (timedOut) return;
+
+        try
+        {
+            Dispatcher.BeginInvoke(new Action(() => _window?.ShowFromTray()));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Activation dispatch failed: {ex.Message}");
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -83,6 +178,14 @@ public partial class App : Application
             catch (ApplicationException) { /* Not owned (e.g. after an AbandonedMutexException path) — nothing to release. */ }
             _singleInstanceMutex.Dispose();
             _singleInstanceMutex = null;
+        }
+
+        if (_activateEvent != null)
+        {
+            _activationWait?.Unregister(null);
+            _activationWait = null;
+            _activateEvent.Dispose();
+            _activateEvent = null;
         }
         base.OnExit(e);
     }

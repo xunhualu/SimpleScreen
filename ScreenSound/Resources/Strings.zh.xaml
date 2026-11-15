@@ -1,0 +1,232 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- ── 侧边栏 ──────────────────────────────────────────────────── -->
+    <sys:String x:Key="Nav_Home">主页</sys:String>
+    <sys:String x:Key="Nav_ScreenDetails">屏幕详情</sys:String>
+
+    <!-- Screen details page -->
+    <sys:String x:Key="SD_Title">屏幕详情</sys:String>
+    <sys:String x:Key="SD_PanelName">面板型号</sys:String>
+    <sys:String x:Key="SD_Resolution">分辨率</sys:String>
+    <sys:String x:Key="SD_RefreshRate">刷新率</sys:String>
+    <sys:String x:Key="SD_Gamut">色域</sys:String>
+    <sys:String x:Key="SD_Gamut_Wide">广色域</sys:String>
+    <sys:String x:Key="SD_Gamut_Srgb">sRGB 标准色域</sys:String>
+    <sys:String x:Key="SD_Unknown">未知</sys:String>
+    <sys:String x:Key="SD_PeakNits">峰值亮度（尼特）</sys:String>
+    <sys:String x:Key="SD_Speakers">扬声器</sys:String>
+    <sys:String x:Key="SD_Speaker_None">无扬声器</sys:String>
+    <sys:String x:Key="SD_Speaker_Has">有（{0}）</sys:String>
+    <sys:String x:Key="SD_Speaker_Short_Yes">有扬声器</sys:String>
+    <sys:String x:Key="SD_Speaker_Short_No">无扬声器</sys:String>
+    <sys:String x:Key="SD_Touch">触控</sys:String>
+    <sys:String x:Key="SD_Touch_Yes">检测到触控设备</sys:String>
+    <sys:String x:Key="SD_Touch_No">不支持触控</sys:String>
+    <sys:String x:Key="SD_Touch_Short_Yes">支持触控</sys:String>
+    <sys:String x:Key="SD_ControlsTitle">屏幕控制（替代屏幕按钮 / OSD 菜单）</sys:String>
+    <sys:String x:Key="SD_Contrast">对比度</sys:String>
+    <sys:String x:Key="SD_Volume">扬声器音量</sys:String>
+    <sys:String x:Key="SD_Input">输入源</sys:String>
+    <sys:String x:Key="SD_ColorMode">色彩模式</sys:String>
+    <sys:String x:Key="SD_Scenario">情景模式</sys:String>
+    <sys:String x:Key="SD_Sharpness">锐利度</sys:String>
+    <sys:String x:Key="SD_DynamicContrast">动态对比度</sys:String>
+    <sys:String x:Key="SD_DigitalBrightness">数字亮度</sys:String>
+    <sys:String x:Key="SD_GainR">红色增益</sys:String>
+    <sys:String x:Key="SD_GainG">绿色增益</sys:String>
+    <sys:String x:Key="SD_GainB">蓝色增益</sys:String>
+    <sys:String x:Key="SD_Mute">扬声器静音</sys:String>
+    <sys:String x:Key="SD_MuteOff">关</sys:String>
+    <sys:String x:Key="SD_MuteOn">开</sys:String>
+    <sys:String x:Key="SD_SoftwareColorTitle">软件调色</sys:String>
+    <sys:String x:Key="SD_SoftwareColorHint">（只影响本机画面，不写入屏幕）</sys:String>
+    <sys:String x:Key="SD_ColorTemp">色温</sys:String>
+    <sys:String x:Key="SD_EyeCareLevel">护眼（低蓝光）</sys:String>
+    <sys:String x:Key="SD_ColorTempHint">6500K = 屏幕原始色温，往左更暖、往右更冷</sys:String>
+    <sys:String x:Key="SD_ResetColor">恢复原始色彩</sys:String>
+    <sys:String x:Key="SD_HardwareOnly">※ 以下功能只有显示器机身按键能调，软件无法调节（该屏未开放对应 DDC 通道）：{0}</sys:String>
+    <sys:String x:Key="SD_NotSupported">这条设置该屏没有真正接受（写入后被弹回），已为你还原</sys:String>
+    <sys:String x:Key="SD_Probing">正在探测该屏支持的调节项…</sys:String>
+    <sys:String x:Key="SD_EyeCare">护眼模式（色彩预设）</sys:String>
+    <sys:String x:Key="SD_Orientation">屏幕方向</sys:String>
+    <sys:String x:Key="SD_Landscape">横屏</sys:String>
+    <sys:String x:Key="SD_Portrait">竖屏</sys:String>
+    <sys:String x:Key="SD_NoDdc">该屏幕不响应 DDC/CI 控制指令，对比度等硬件设置仍需按屏幕按钮；下面的「软件调色」不受影响，照常可用。</sys:String>
+    <sys:String x:Key="SD_WriteFail">指令发送失败，屏幕未确认</sys:String>
+    <sys:String x:Key="SD_InputVerify">已发送输入源切换指令，但屏幕未确认已切换</sys:String>
+    <sys:String x:Key="SD_RotateFail">旋转失败（该方向可能不被当前显示配置支持）</sys:String>
+    <sys:String x:Key="SD_BrightnessNote">亮度调节请回主页的「亮度同步」卡片，这里不重复提供。</sys:String>
+    <sys:String x:Key="SD_ColorSync_Title">屏幕色彩同步</sys:String>
+    <sys:String x:Key="SD_ColorSync_Desc">所有显示器共用同一套色温与护眼设置，在任意一块屏上调色会同步到其他屏幕</sys:String>
+
+    <!-- ── 链路状态诊断 ────────────────────────────────────────────── -->
+    <sys:String x:Key="SD_Link_Title">链路状态</sys:String>
+    <sys:String x:Key="SD_Link_Connection">接入方式</sys:String>
+    <sys:String x:Key="SD_Link_Bandwidth">带宽需求</sys:String>
+    <sys:String x:Key="SD_Link_Power">供电</sys:String>
+    <sys:String x:Key="SD_Link_Usb">USB 瓶颈</sys:String>
+    <sys:String x:Key="LD_Tech_Internal">内置面板</sys:String>
+    <sys:String x:Key="LD_Tech_Hdmi">HDMI</sys:String>
+    <sys:String x:Key="LD_Tech_Dp">DisplayPort / Type-C（DP Alt）</sys:String>
+    <sys:String x:Key="LD_Tech_DpTunnel">USB-C/USB4 隧道 DisplayPort</sys:String>
+    <sys:String x:Key="LD_Tech_UsbVideo">USB 视频桥接（DisplayLink 类）</sys:String>
+    <sys:String x:Key="LD_Tech_Vga">VGA</sys:String>
+    <sys:String x:Key="LD_Tech_Dvi">DVI</sys:String>
+    <sys:String x:Key="LD_Tech_Wireless">无线显示（Miracast）</sys:String>
+    <sys:String x:Key="LD_Tech_Unknown">未识别</sys:String>
+    <sys:String x:Key="LD_Bandwidth_Format">≈{0:F1} Gbps（估算）</sys:String>
+    <sys:String x:Key="LD_Power_Internal">笔记本 / 主机供电</sys:String>
+    <sys:String x:Key="LD_Power_Unknown">系统未上报</sys:String>
+    <sys:String x:Key="LD_Usb_VideoNote">USB 2.0 口会卡顿</sys:String>
+    <sys:String x:Key="LD_Usb_DpAltNote">DP 通道，USB 仅触控 / HUB</sys:String>
+    <sys:String x:Key="LD_Usb_TunnelNote">与 USB 共享 USB4 带宽</sys:String>
+    <sys:String x:Key="LD_Usb_Na">不适用</sys:String>
+    <sys:String x:Key="LD_Warn_Bandwidth">带宽不足：约需 {0:F1} Gbps，超出 {1} 的常见上限，可能出现闪烁或黑屏</sys:String>
+    <sys:String x:Key="LD_Warn_Duplicate">另一条链路：{0}（已合并）</sys:String>
+    <sys:String x:Key="LD_Alert_Title">链路告警</sys:String>
+    <sys:String x:Key="LD_Alert_SignalLost">信号丢失：面板 {0} 已从系统断开。请检查线缆、接口与供电。</sys:String>
+    <sys:String x:Key="LD_Alert_Duplicate">检测到双链路接入：面板 {0} 同时经 {1} 条链路连接（{2}），已自动合并为一张卡片。</sys:String>
+    <sys:String x:Key="SD_NoInput">仅屏幕 OSD 可切换</sys:String>
+    <sys:String x:Key="SD_NoInputTip">屏幕 OSD 菜单里有信号源切换，但这块屏未通过 DDC/CI 公开可切换的输入源列表，软件无法下发切换指令。请用屏幕按键操作。</sys:String>
+    <sys:String x:Key="LD_DualLink_Badge">双链路</sys:String>
+    <sys:String x:Key="LD_DualLink_Note">已合并为一张卡片，输入源请用屏幕 OSD 切换。</sys:String>
+    <sys:String x:Key="SD_NoPreset">该屏幕不支持色彩预设切换</sys:String>
+    <sys:String x:Key="Nav_Pinned">已固定</sys:String>
+    <sys:String x:Key="Nav_Settings">设置</sys:String>
+    <sys:String x:Key="Nav_About">关于</sys:String>
+    <sys:String x:Key="Nav_Hotkeys">快捷键</sys:String>
+
+    <!-- ── 主页 ────────────────────────────────────────────────────── -->
+    <sys:String x:Key="Home_AudioRouting_Title">音频路由</sys:String>
+    <sys:String x:Key="Home_AudioRouting_Desc">根据窗口所在的显示器分配音频输出</sys:String>
+    <sys:String x:Key="Home_WindowScale_Title">窗口大小同步</sys:String>
+    <sys:String x:Key="Home_WindowScale_Desc">拖到缩放比例不同的显示器时保持窗口大小不变</sys:String>
+    <sys:String x:Key="Home_Brightness_Title">亮度同步</sys:String>
+    <sys:String x:Key="Home_Brightness_Desc">让所有显示器保持相同的亮度</sys:String>
+    <sys:String x:Key="Home_Brightness_SliderTip">设置所有显示器的亮度</sys:String>
+    <sys:String x:Key="Home_Brightness_ToggleTip">在所有显示器之间同步亮度</sys:String>
+    <sys:String x:Key="Home_Brightness_Absolute">绝对亮度统一（按尼特）</sys:String>
+    <sys:String x:Key="Home_Brightness_DetailsTip">展开 / 收起详细设置</sys:String>
+    <sys:String x:Key="Home_Brightness_AbsoluteDesc">按实际亮度对齐，而不是按百分比——适合峰值亮度不同的屏幕（例如副屏最高只有 400 尼特，主屏更亮）。请在下方填写各屏的峰值亮度。</sys:String>
+    <sys:String x:Key="Home_Brightness_PeakNits">峰值亮度</sys:String>
+    <sys:String x:Key="Home_MonitorMappings">显示器映射</sys:String>
+    <sys:String x:Key="Home_Refresh_Tip">刷新显示器与音频设备</sys:String>
+    <sys:String x:Key="Home_Primary">主显示器</sys:String>
+    <sys:String x:Key="Monitor_Text">{0} - {1}x{2}</sys:String>
+    <sys:String x:Key="Monitor_PrimarySuffix">（主显示器）</sys:String>
+    <sys:String x:Key="Home_ActiveSessions">活动音频会话</sys:String>
+    <sys:String x:Key="Home_EmptySessions_Title">当前没有活动的音频会话</sys:String>
+    <sys:String x:Key="Home_EmptySessions_Desc">开启路由并播放一些音频试试</sys:String>
+    <sys:String x:Key="Menu_PinToDevice">固定到设备</sys:String>
+    <sys:String x:Key="Menu_RemovePin">取消固定</sys:String>
+    <sys:String x:Key="Home_PinnedBadgeTip">已被应用固定规则覆盖</sys:String>
+
+    <!-- ── 已固定 ──────────────────────────────────────────────────── -->
+    <sys:String x:Key="Pinned_Title">已固定的应用</sys:String>
+    <sys:String x:Key="Pinned_Desc">已固定的应用始终通过所选设备播放，无论窗口位于哪台显示器。在主页右键点击某个活动会话即可将其固定。</sys:String>
+    <sys:String x:Key="Pinned_RemoveTip">取消固定</sys:String>
+    <sys:String x:Key="Pinned_Empty_Title">暂无已固定的应用</sys:String>
+    <sys:String x:Key="Pinned_Empty_Desc">在主页右键点击活动会话即可固定</sys:String>
+
+    <!-- ── 设置 ────────────────────────────────────────────────────── -->
+    <sys:String x:Key="Settings_Title">设置</sys:String>
+    <sys:String x:Key="Settings_Theme_Title">主题</sys:String>
+    <sys:String x:Key="Settings_Theme_Desc">使用浅色、深色主题，或跟随系统设置</sys:String>
+    <sys:String x:Key="Settings_AutoStart_Title">开机自动启动</sys:String>
+    <sys:String x:Key="Settings_AutoStart_Desc">登录 Windows 时自动运行</sys:String>
+    <sys:String x:Key="Settings_MinimizeOnClose_Title">关闭时最小化</sys:String>
+    <sys:String x:Key="Settings_MinimizeOnClose_Desc">关闭窗口时最小化到系统托盘而不是退出</sys:String>
+    <sys:String x:Key="Settings_StartMinimized_Title">启动时最小化</sys:String>
+    <sys:String x:Key="Settings_StartMinimized_Desc">启动后隐藏在系统托盘中</sys:String>
+    <sys:String x:Key="Settings_HoldRouting_Title">窗口隐藏时保持音频输出</sys:String>
+    <sys:String x:Key="Settings_HoldRouting_Desc">当某个应用的窗口在所有显示器上都找不到时（已隐藏或最小化），保持它当前的输出设备，而不是切换到默认设备</sys:String>
+    <sys:String x:Key="Settings_Language_Title">语言</sys:String>
+    <sys:String x:Key="Settings_Language_Desc">选择应用的界面显示语言</sys:String>
+
+    <!-- ── 关于 ────────────────────────────────────────────────────── -->
+    <sys:String x:Key="About_Title">关于</sys:String>
+    <sys:String x:Key="About_Links">链接</sys:String>
+    <sys:String x:Key="About_ProjectSite">GitHub 项目主页</sys:String>
+    <sys:String x:Key="About_LatestRelease">GitHub 最新发布</sys:String>
+    <sys:String x:Key="About_Updates">更新</sys:String>
+    <sys:String x:Key="About_CheckForUpdates">检查更新</sys:String>
+    <sys:String x:Key="About_OpenReleasePage">打开发布页面</sys:String>
+    <sys:String x:Key="About_Version">版本 {0}</sys:String>
+
+    <!-- ── 捐赠 / 关于本定制版（已并入"关于"页） ──────────────────── -->
+    <sys:String x:Key="Donate_SupportTitle">支持 ScreenSound</sys:String>
+    <sys:String x:Key="Donate_Desc">ScreenSound 是一位独立开发者利用业余时间完成的项目。如果它让你的多显示器体验好了一点，一次小小的打赏可以让作者更有理由投入修复 Bug 和开发新功能——无论如何，这款应用都会保持免费。</sys:String>
+    <sys:String x:Key="Donate_AboutMeTitle">关于 SimpleScreen</sys:String>
+    <sys:String x:Key="Donate_AboutMeDesc" xml:space="preserve">你正在使用的这个定制版由 xunhualu 维护，在原版 ScreenSound 基础上持续打磨：
+· 跨屏同步：窗口大小、色温、亮度在每块屏上都一致
+· 音频路由锁定屏幕，窗口隐藏或最小化也不会被挪走
+· 屏幕详情一站式控制：DDC 调节、软件调色、屏幕旋转
+· 中 / 英 / 日 / 韩多语言界面</sys:String>
+
+    <!-- ── 快捷键 ────────────────────────────────────────────────── -->
+    <sys:String x:Key="HK_Title">快捷键设置</sys:String>
+    <sys:String x:Key="HK_TypingGuard">每个热键由「修饰键」和「主键」两格组成，点哪一格就只改哪一格。默认 Alt+F / Alt+U，带修饰键的组合不会与打字冲突；若把修饰键格清空为「—」，打字时该热键会自动临时停用。自动优化布局只作用于副屏，主屏窗口不会被移动。</sys:String>
+    <sys:String x:Key="HK_Move_Title">窗口快速投屏</sys:String>
+    <sys:String x:Key="HK_Move_Desc">选中任意窗口后按下热键，该窗口立即移动到另一台显示器并居中显示；最大化的窗口铺满目标屏幕，最小化的窗口会先还原。再按一次即可移回原屏幕</sys:String>
+    <sys:String x:Key="HK_Key_Title">热键按键</sys:String>
+    <sys:String x:Key="HK_Key_Desc">两格独立设置：点左格后按住 Ctrl / Alt / Shift / Win（可组合）再松开即保存，按 Backspace 可清空为「—」；点右格后直接按下主键即可，不会影响左格。默认 Alt+F 不影响打字</sys:String>
+    <sys:String x:Key="HK_Record">录制</sys:String>
+    <sys:String x:Key="HK_Recording">请按下按键（Esc 取消）…</sys:String>
+    <sys:String x:Key="HK_ModifierLabel">修饰键</sys:String>
+    <sys:String x:Key="HK_MainKeyLabel">主键</sys:String>
+    <sys:String x:Key="HK_ModifierTip">点击后按住 Ctrl / Alt / Shift / Win（可组合）再松开即保存；Backspace 清空；Esc 取消</sys:String>
+    <sys:String x:Key="HK_KeyBoxTip">点击后按下要使用的按键；Esc 取消</sys:String>
+    <sys:String x:Key="HK_ModifierRecording">请按住修饰键（Ctrl / Alt / Shift / Win 可组合），松开即保存；Backspace 清空，Esc 取消…</sys:String>
+    <sys:String x:Key="HK_KeyRecording">请按下新的主键（Esc 取消）…</sys:String>
+    <sys:String x:Key="HK_RegisterFailed">热键注册失败：该组合键可能已被其他程序占用</sys:String>
+    <sys:String x:Key="HK_Details">详情</sys:String>
+    <sys:String x:Key="HK_DetailsTip">展开 / 收起说明</sys:String>
+
+    <sys:String x:Key="HK_Switch_Hotkey">热键</sys:String>
+    <sys:String x:Key="HK_Switch_Auto">自动优化</sys:String>
+    <sys:String x:Key="HK_Switch_HotkeyTip">控制按键整理是否可用；关闭后按 U 不再整理，自动优化仍按自己的开关运行。</sys:String>
+    <sys:String x:Key="HK_Switch_AutoTip">无需按键，窗口变化或出现空白时自动整理副屏；与热键开关互相独立。</sys:String>
+    <sys:String x:Key="HK_Auto_Title">自动优化布局</sys:String>
+    <sys:String x:Key="HK_Auto_Desc">开启后无需按键：副屏出现新窗口，或窗口缩小留出空白时，自动把窗口均分铺满（1 个窗口全屏，2 个窗口横屏左右／竖屏上下，更多窗口网格排列）。均分完成后不会再改动布局，你可以自由调成 3/7 分；只有再拖入新窗口或出现明显空白时才重新整理。只作用于副屏，主屏窗口完全不受影响。</sys:String>
+    <sys:String x:Key="HK_ArrangeKey_Title">整理布局热键</sys:String>
+    <sys:String x:Key="HK_ArrangeKey_Desc">按下热键立即整理副屏窗口（默认 Alt+U），与自动优化相互独立。修饰键格与主键格可分别修改。只整理副屏，主屏窗口完全不动；单键模式下打字会自动让行</sys:String>
+
+    <!-- ── 屏幕重命名 / 标签 ─────────────────────────────────────── -->
+    <sys:String x:Key="Mon_RenameTip">重命名 / 添加标签</sys:String>
+    <sys:String x:Key="Mon_NameLabel">名称</sys:String>
+    <sys:String x:Key="Mon_NamePlaceholder">留空则使用硬件名称</sys:String>
+    <sys:String x:Key="Mon_TagLabel">标签</sys:String>
+    <sys:String x:Key="Mon_TagPlaceholder">例如：工作屏、便携屏、游戏专用</sys:String>
+    <sys:String x:Key="Mon_Save">保存</sys:String>
+    <sys:String x:Key="Mon_Cancel">取消</sys:String>
+
+    <!-- ── 主题选项 ────────────────────────────────────────────────── -->
+    <sys:String x:Key="Theme_System">跟随系统</sys:String>
+    <sys:String x:Key="Theme_Light">浅色</sys:String>
+    <sys:String x:Key="Theme_Dark">深色</sys:String>
+
+    <!-- ── 运行时 / 代码生成文本 ──────────────────────────────────── -->
+    <sys:String x:Key="Text_NoMapping">（不映射）</sys:String>
+    <sys:String x:Key="Text_DeviceNotConnected">（设备未连接）</sys:String>
+    <sys:String x:Key="Text_UnknownDevice">（未知设备）</sys:String>
+    <sys:String x:Key="Text_NoAudioDevices">（没有音频设备）</sys:String>
+
+    <sys:String x:Key="Brightness_NoMonitors">未找到可控制亮度的显示器</sys:String>
+    <sys:String x:Key="Brightness_MonitorSummary">{0} 台显示器 · {1}</sys:String>
+    <sys:String x:Key="Brightness_StatusItemNits">{0}：{1}% · {2} 尼特</sys:String>
+    <sys:String x:Key="Brightness_NitsUnit">尼特</sys:String>
+    <sys:String x:Key="Brightness_SliderNits">{0} 尼特</sys:String>
+
+    <sys:String x:Key="Update_Checking">正在检查…</sys:String>
+    <sys:String x:Key="Update_UpToDate">已是最新版本（v{0}）。</sys:String>
+    <sys:String x:Key="Update_Available">发现新版本 {0}。</sys:String>
+    <sys:String x:Key="Update_NetworkError">无法连接 GitHub：{0}</sys:String>
+    <sys:String x:Key="Update_Failed">检查更新失败：{0}</sys:String>
+
+    <sys:String x:Key="Tray_Show">显示</sys:String>
+    <sys:String x:Key="Tray_Exit">退出</sys:String>
+    <sys:String x:Key="App_AlreadyRunning">SimpleScreen 已在运行 — 请查看系统托盘。</sys:String>
+
+</ResourceDictionary>

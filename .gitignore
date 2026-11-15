@@ -1,5 +1,6 @@
 # Build outputs
 [Bb]in/
+.verify-bin/
 [Oo]bj/
 [Oo]ut/
 [Bb]uild/

@@ -1,5 +1,6 @@
-using ScreenSound.Interop;
+﻿using ScreenSound.Interop;
 using ScreenSound.Models;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -33,6 +34,7 @@ public class MonitorService
                     Handle = hMonitor,
                     DeviceName = deviceName,
                     FriendlyName = friendlyName,
+                    IdentityKey = MonitorDetailsService.GetIdentityKey(deviceName),
                     Left = info.rcMonitor.Left,
                     Top = info.rcMonitor.Top,
                     Width = info.rcMonitor.Right - info.rcMonitor.Left,
@@ -74,6 +76,28 @@ public class MonitorService
         _cachedMonitors = null;
     }
 
+    // The window we treat as "the app's main window", per owning process, plus
+    // the monitor it was last seen on.
+    //
+    // Audio outlives the UI: players and call apps hide their window to the tray
+    // (or minimise it) while playback keeps going, and the helper windows they
+    // leave behind — desktop lyrics, mini player, floating toolbar — frequently
+    // sit on a DIFFERENT screen. Re-picking "the biggest visible window" every
+    // cycle would then mistake such a helper for the app and drag its audio onto
+    // that screen. Remembering the window we already chose keeps hidden apps
+    // anchored where the user left them.
+    private sealed class WindowMemory
+    {
+        public IntPtr Hwnd;
+        public string? DeviceName;
+        public DateTime LastSeenUtc;
+    }
+
+    private readonly ConcurrentDictionary<uint, WindowMemory> _windowMemory = new();
+
+    /// <summary>Drops remembered window state for a process that has exited.</summary>
+    public void ForgetProcess(uint processId) => _windowMemory.TryRemove(processId, out _);
+
     public MonitorInfo? GetMonitorForProcess(uint processId)
     {
         // Try the exact PID first, then walk up the parent process tree.
@@ -81,45 +105,99 @@ public class MonitorService
         // session runs in a child renderer process without a visible window.
         var pidsToTry = GetProcessAndAncestors(processId);
 
-        IntPtr hwnd = IntPtr.Zero;
-        foreach (var pid in pidsToTry)
-        {
-            hwnd = FindMainWindowForProcess(pid);
-            if (hwnd != IntPtr.Zero)
-                break;
-        }
-
-        if (hwnd == IntPtr.Zero) return null;
-
         var monitors = GetMonitors();
         if (monitors.Count == 0) return null;
 
-        // PRIMARY METHOD: Use the window's actual position to determine which
-        // monitor it's on. This works correctly regardless of DPI scaling.
-        var windowMonitor = FindMonitorByWindowPosition(hwnd, monitors);
-        if (windowMonitor != null) return windowMonitor;
-
-        // FALLBACK: Use MonitorFromWindow API + device name matching
-        var hMonitor = NativeMethods.MonitorFromWindow(hwnd, NativeMethods.MONITOR_DEFAULTTONEAREST);
-        if (hMonitor != IntPtr.Zero)
+        // ---- 1) Follow the window we already know -------------------------
+        // Alive and on screen → follow it (the user may have dragged it).
+        // Alive but hidden / minimised → stay on the screen it last occupied:
+        // "I tucked the window away, my music belongs to that screen" — and
+        // returning a monitor (rather than null) also lets the router pull the
+        // audio back if something else moved the stream meanwhile.
+        foreach (var pid in pidsToTry)
         {
-            // Try handle match
-            var match = monitors.FirstOrDefault(m => m.Handle == hMonitor);
-            if (match != null) return match;
+            if (!_windowMemory.TryGetValue(pid, out var mem)) continue;
 
-            // Try device name match
-            var info = new NativeMethods.MONITORINFOEX();
-            info.cbSize = Marshal.SizeOf(info);
-            if (NativeMethods.GetMonitorInfo(hMonitor, ref info))
+            if (!StillOwnedBy(mem.Hwnd, pid))
             {
-                var deviceName = info.szDevice?.TrimEnd('\0');
-                match = monitors.FirstOrDefault(m => m.DeviceName == deviceName);
-                if (match != null) return match;
+                _windowMemory.TryRemove(pid, out _);
+                continue;
+            }
+
+            if (!NativeMethods.IsIconic(mem.Hwnd) && NativeMethods.IsWindowVisible(mem.Hwnd)
+                && !IsParkedOffDesktop(mem.Hwnd))
+            {
+                var live = FindMonitorByWindowPosition(mem.Hwnd, monitors)
+                           ?? MonitorFromWindowFallback(mem.Hwnd, monitors);
+                if (live != null)
+                {
+                    mem.DeviceName = live.DeviceName;
+                    mem.LastSeenUtc = DateTime.UtcNow;
+                    return live;
+                }
+            }
+
+            var remembered = monitors.FirstOrDefault(m => m.DeviceName == mem.DeviceName);
+            if (remembered != null)
+            {
+                mem.LastSeenUtc = DateTime.UtcNow;
+                return remembered;
             }
         }
 
-        // Last resort: primary monitor
-        return monitors.FirstOrDefault(m => m.IsPrimary) ?? monitors.First();
+        // ---- 2) Nothing remembered yet — locate the real main window ------
+        var hwnd = FindMainWindowForProcess(pidsToTry);
+        if (hwnd == IntPtr.Zero) return null;
+
+        // Zero-sized / parked outside the virtual desktop: report "unknown"
+        // instead of letting the nearest-monitor maths snap the audio to
+        // whichever screen happens to sit closest to the parking spot.
+        if (IsParkedOffDesktop(hwnd)) return null;
+
+        var resolved = FindMonitorByWindowPosition(hwnd, monitors)
+                       ?? MonitorFromWindowFallback(hwnd, monitors);
+        if (resolved == null) return null;
+
+        NativeMethods.GetWindowThreadProcessId(hwnd, out uint ownerPid);
+        _windowMemory[ownerPid] = new WindowMemory
+        {
+            Hwnd = hwnd,
+            DeviceName = resolved.DeviceName,
+            LastSeenUtc = DateTime.UtcNow
+        };
+        return resolved;
+    }
+
+    private static bool StillOwnedBy(IntPtr hwnd, uint pid)
+    {
+        if (hwnd == IntPtr.Zero || !NativeMethods.IsWindow(hwnd)) return false;
+        NativeMethods.GetWindowThreadProcessId(hwnd, out uint owner);
+        return owner == pid;
+    }
+
+    private static bool IsParkedOffDesktop(IntPtr hwnd)
+    {
+        if (!NativeMethods.GetWindowRect(hwnd, out var rect)) return true;
+        if (rect.Right <= rect.Left || rect.Bottom <= rect.Top) return true;
+        return rect.Right < -5000 || rect.Bottom < -5000;
+    }
+
+    private static MonitorInfo? MonitorFromWindowFallback(IntPtr hwnd, List<MonitorInfo> monitors)
+    {
+        var hMonitor = NativeMethods.MonitorFromWindow(hwnd, NativeMethods.MONITOR_DEFAULTTONEAREST);
+        if (hMonitor == IntPtr.Zero) return null;
+
+        var match = monitors.FirstOrDefault(m => m.Handle == hMonitor);
+        if (match != null) return match;
+
+        var info = new NativeMethods.MONITORINFOEX();
+        info.cbSize = Marshal.SizeOf(info);
+        if (NativeMethods.GetMonitorInfo(hMonitor, ref info))
+        {
+            var deviceName = info.szDevice?.TrimEnd('\0');
+            match = monitors.FirstOrDefault(m => m.DeviceName == deviceName);
+        }
+        return match;
     }
 
     private MonitorInfo? FindMonitorByWindowPosition(IntPtr hwnd, List<MonitorInfo> monitors)
@@ -224,31 +302,52 @@ public class MonitorService
         return 0;
     }
 
-    private IntPtr FindMainWindowForProcess(uint targetPid)
+    /// <summary>
+    /// Picks the window that represents an app, scanning the given processes
+    /// (the audio session's own process plus its ancestors, so Chromium-style
+    /// renderer → browser-parent chains resolve too).
+    /// </summary>
+    /// <remarks>
+    /// Auxiliary windows are rejected on purpose. When a player hides its main
+    /// window to the tray, what stays visible is a desktop-lyrics overlay, a
+    /// mini player or a floating toolbar — none of which live where the app's
+    /// audio belongs. Accepting one of those is precisely how audio used to end
+    /// up on another screen's speaker.
+    /// </remarks>
+    private IntPtr FindMainWindowForProcess(List<uint> candidatePids)
     {
+        var wanted = new HashSet<uint>(candidatePids);
         IntPtr bestWindow = IntPtr.Zero;
-        int bestArea = 0;
+        long bestArea = 0;
 
         NativeMethods.EnumWindows((IntPtr hWnd, IntPtr lParam) =>
         {
-            if (!NativeMethods.IsWindowVisible(hWnd))
-                return true;
-
             NativeMethods.GetWindowThreadProcessId(hWnd, out uint pid);
-            if (pid != targetPid)
-                return true;
+            if (!wanted.Contains(pid)) return true;
 
-            if (NativeMethods.GetWindowTextLength(hWnd) == 0)
-                return true;
+            if (!NativeMethods.IsWindowVisible(hWnd)) return true;
+            if (NativeMethods.IsIconic(hWnd)) return true;
+            if (NativeMethods.GetWindowTextLength(hWnd) == 0) return true;
 
-            NativeMethods.GetWindowRect(hWnd, out NativeMethods.RECT rect);
+            long ex = NativeMethods.GetWindowLongPtr(hWnd, NativeMethods.GWL_EXSTYLE).ToInt64();
+
+            // Never a click-through / never-activating overlay (lyrics, HUDs).
+            if ((ex & NativeMethods.WS_EX_NOACTIVATE) != 0) return true;
+
+            // Tool palette / mini player: a tool window that is deliberately kept
+            // off the taskbar is not the app's main UI.
+            if ((ex & NativeMethods.WS_EX_TOOLWINDOW) != 0 &&
+                (ex & NativeMethods.WS_EX_APPWINDOW) == 0) return true;
+
+            // Dialog owned by another window — follows its owner, not the app.
+            if (NativeMethods.GetWindow(hWnd, NativeMethods.GW_OWNER) != IntPtr.Zero) return true;
+
+            if (!NativeMethods.GetWindowRect(hWnd, out NativeMethods.RECT rect)) return true;
             int w = rect.Right - rect.Left;
             int h = rect.Bottom - rect.Top;
+            if (w < 200 || h < 150) return true;
 
-            if (w < 50 || h < 50)
-                return true;
-
-            int area = w * h;
+            long area = (long)w * h;
             if (area > bestArea)
             {
                 bestArea = area;

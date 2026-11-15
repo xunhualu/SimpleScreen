@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wpfui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:vm="clr-namespace:ScreenSound.ViewModels"
-        Title="ScreenSound"
+        xmlns:attached="clr-namespace:ScreenSound.Attached"
+        Title="SimpleScreen"
         Height="720" Width="900"
         MinHeight="560" MinWidth="720"
         WindowStartupLocation="CenterScreen"
@@ -62,7 +63,7 @@
 
         <!-- ── TITLE BAR ── -->
         <wpfui:TitleBar Grid.ColumnSpan="2" Grid.Row="0"
-                        Title="ScreenSound"
+                        Title="SimpleScreen"
                         ShowMinimize="True" ShowMaximize="True" ShowClose="True"/>
 
         <!-- ── SIDEBAR ── -->
@@ -73,7 +74,18 @@
                 <StackPanel HorizontalAlignment="Center">
                     <wpfui:SymbolIcon Symbol="Home24" FontSize="22" HorizontalAlignment="Center"
                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
-                    <TextBlock Text="Home" FontSize="10" HorizontalAlignment="Center" Margin="0,4,0,0"
+                    <TextBlock Text="{DynamicResource Nav_Home}" FontSize="10" HorizontalAlignment="Center" Margin="0,4,0,0"
+                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
+                </StackPanel>
+            </RadioButton>
+
+            <RadioButton DockPanel.Dock="Top" GroupName="Nav"
+                         Checked="NavButton_Checked" Tag="5"
+                         Style="{StaticResource SidebarNavButton}">
+                <StackPanel HorizontalAlignment="Center">
+                    <wpfui:SymbolIcon Symbol="Desktop24" FontSize="22" HorizontalAlignment="Center"
+                                      Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
+                    <TextBlock Text="{DynamicResource Nav_ScreenDetails}" FontSize="10" HorizontalAlignment="Center" Margin="0,4,0,0"
                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
                 </StackPanel>
             </RadioButton>
@@ -84,16 +96,16 @@
                 <StackPanel HorizontalAlignment="Center">
                     <wpfui:SymbolIcon Symbol="Pin24" FontSize="22" HorizontalAlignment="Center"
                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
-                    <TextBlock Text="Pinned" FontSize="10" HorizontalAlignment="Center" Margin="0,4,0,0"
+                    <TextBlock Text="{DynamicResource Nav_Pinned}" FontSize="10" HorizontalAlignment="Center" Margin="0,4,0,0"
                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
                 </StackPanel>
             </RadioButton>
 
             <!--
                  Bottom-docked children stack upward from the bottom in XAML order:
-                 About docks first → very bottom; Donate next → above About;
-                 Settings last → above Donate. Visual top-to-bottom in the
-                 sidebar's bottom cluster is Settings, Donate, About.
+                 About docks first → very bottom; Hotkeys next → above About;
+                 Settings last → above Hotkeys. Visual top-to-bottom in the
+                 sidebar's bottom cluster is Settings, Hotkeys, About.
             -->
             <RadioButton DockPanel.Dock="Bottom" GroupName="Nav"
                          Checked="NavButton_Checked" Tag="3"
@@ -101,7 +113,7 @@
                 <StackPanel HorizontalAlignment="Center">
                     <wpfui:SymbolIcon Symbol="Info24" FontSize="22" HorizontalAlignment="Center"
                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
-                    <TextBlock Text="About" FontSize="10" HorizontalAlignment="Center" Margin="0,4,0,0"
+                    <TextBlock Text="{DynamicResource Nav_About}" FontSize="10" HorizontalAlignment="Center" Margin="0,4,0,0"
                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
                 </StackPanel>
             </RadioButton>
@@ -110,9 +122,9 @@
                          Checked="NavButton_Checked" Tag="4"
                          Style="{StaticResource SidebarNavButton}">
                 <StackPanel HorizontalAlignment="Center">
-                    <wpfui:SymbolIcon Symbol="Heart24" FontSize="22" HorizontalAlignment="Center"
+                    <wpfui:SymbolIcon Symbol="Keyboard24" FontSize="22" HorizontalAlignment="Center"
                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
-                    <TextBlock Text="Donate" FontSize="10" HorizontalAlignment="Center" Margin="0,4,0,0"
+                    <TextBlock Text="{DynamicResource Nav_Hotkeys}" FontSize="10" HorizontalAlignment="Center" Margin="0,4,0,0"
                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
                 </StackPanel>
             </RadioButton>
@@ -123,7 +135,7 @@
                 <StackPanel HorizontalAlignment="Center">
                     <wpfui:SymbolIcon Symbol="Settings24" FontSize="22" HorizontalAlignment="Center"
                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
-                    <TextBlock Text="Settings" FontSize="10" HorizontalAlignment="Center" Margin="0,4,0,0"
+                    <TextBlock Text="{DynamicResource Nav_Settings}" FontSize="10" HorizontalAlignment="Center" Margin="0,4,0,0"
                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
                 </StackPanel>
             </RadioButton>
@@ -135,14 +147,20 @@
             <!-- ═══ HOME PAGE ═══ -->
             <Border x:Name="HomePage" Visibility="Collapsed" Opacity="0">
                 <Border.RenderTransform><TranslateTransform/></Border.RenderTransform>
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
+                <!-- Whole page scrolls (including the routing/brightness/mapping sections above),
+                     otherwise a 3-monitor setup with the absolute-brightness panel expanded
+                     overflows the window height and the bottom cards are unreachable. -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Padding="24,20,24,16">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                    <!-- Fixed top section: Audio Routing + Monitor Mappings + Sessions header -->
-                    <StackPanel Grid.Row="0" Margin="24,20,24,0">
+                    <!-- Top section: Audio Routing + Brightness + Monitor Mappings + Sessions header -->
+                    <StackPanel Grid.Row="0" Margin="0">
                         <wpfui:CardControl Margin="0,0,0,20">
                             <wpfui:CardControl.Header>
                                 <StackPanel Orientation="Horizontal">
@@ -150,8 +168,8 @@
                                                       Margin="0,0,14,0" VerticalAlignment="Center"
                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Audio Routing" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Route audio based on monitor placement" FontSize="11"
+                                        <TextBlock Text="{DynamicResource Home_AudioRouting_Title}" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{DynamicResource Home_AudioRouting_Desc}" FontSize="11"
                                                    Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </StackPanel>
@@ -159,21 +177,159 @@
                             <wpfui:ToggleSwitch IsChecked="{Binding IsRoutingEnabled}"/>
                         </wpfui:CardControl>
 
+                        <!-- Window size sync card -->
+                        <wpfui:CardControl Margin="0,0,0,20">
+                            <wpfui:CardControl.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <wpfui:SymbolIcon Symbol="ScaleFit24" FontSize="22"
+                                                      Margin="0,0,14,0" VerticalAlignment="Center"
+                                                      Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource Home_WindowScale_Title}" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{DynamicResource Home_WindowScale_Desc}" FontSize="11"
+                                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </wpfui:CardControl.Header>
+                            <wpfui:ToggleSwitch IsChecked="{Binding IsWindowScaleSyncEnabled}"/>
+                        </wpfui:CardControl>
+
+                        <!-- Brightness Sync card -->
+                        <wpfui:Card Margin="0,0,0,20" Padding="16">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <wpfui:SymbolIcon Grid.Column="0" Symbol="WeatherSunny24" FontSize="22"
+                                                  Margin="0,0,14,0" VerticalAlignment="Top"
+                                                  Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Home_Brightness_Title}" FontSize="14" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{DynamicResource Home_Brightness_Desc}"
+                                               FontSize="11" Margin="0,2,0,0"
+                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+
+                                    <StackPanel Margin="0,10,0,0"
+                                                Visibility="{Binding IsBrightnessSyncEnabled, Converter={StaticResource BoolToVis}}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <wpfui:SymbolIcon Grid.Column="0" Symbol="WeatherSunny24" FontSize="16"
+                                                              VerticalAlignment="Center" Margin="0,0,10,0"
+                                                              Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                            <Slider Grid.Column="1" Minimum="0" Maximum="100"
+                                                    Value="{Binding BrightnessValue, Mode=TwoWay}"
+                                                    VerticalAlignment="Center" Margin="0,0,10,0"
+                                                    ToolTip="{DynamicResource Home_Brightness_SliderTip}"/>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding SliderValueText}"
+                                                       FontSize="12" MinWidth="52" TextAlignment="Right"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                        </Grid>
+                                        <TextBlock Text="{Binding BrightnessStatus}" FontSize="11" Margin="0,6,0,0"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+
+                                        <Grid Margin="0,10,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox Grid.Column="0" Content="{DynamicResource Home_Brightness_Absolute}"
+                                                      IsChecked="{Binding AbsoluteBrightnessSync}"
+                                                      FontSize="12" VerticalAlignment="Center"/>
+                                            <!-- Chevron toggle: details (peak-nits inputs) stay hidden
+                                                 until the user explicitly opens them. Sits right
+                                                 after the checkbox text. Raw Segoe glyph because an
+                                                 overriding Style on wpfui:SymbolIcon would strip its
+                                                 theme style (font/foreground) and render nothing. -->
+                                            <Button Grid.Column="1" Command="{Binding ToggleAbsoluteDetailsCommand}"
+                                                    Background="Transparent" BorderThickness="0" Padding="8,2"
+                                                    VerticalAlignment="Center" Cursor="Hand" Margin="4,0,0,0"
+                                                    ToolTip="{DynamicResource Home_Brightness_DetailsTip}">
+                                                <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"
+                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                           VerticalAlignment="Center" Text="&#xE70D;">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding AbsoluteDetailsExpanded}" Value="True">
+                                                                    <Setter Property="Text" Value="&#xE70E;"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Button>
+                                        </Grid>
+
+                                        <StackPanel Margin="0,4,0,0"
+                                                    Visibility="{Binding AbsoluteDetailsExpanded, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="{DynamicResource Home_Brightness_AbsoluteDesc}"
+                                                       FontSize="11" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+
+                                            <ItemsControl ItemsSource="{Binding BrightnessPeaks}" Margin="0,8,0,0">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="0,2,0,0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="{Binding DisplayName}"
+                                                                       FontSize="11" VerticalAlignment="Center"
+                                                                       TextTrimming="CharacterEllipsis" Margin="0,0,10,0"
+                                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                            <TextBox Grid.Column="1" Width="64" Height="26"
+                                                                     FontSize="11" Padding="6,2"
+                                                                     VerticalContentAlignment="Center"
+                                                                     Text="{Binding PeakNits, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                     ToolTip="{DynamicResource Home_Brightness_PeakNits}"/>
+                                                            <TextBlock Grid.Column="2" FontSize="11" Margin="6,0,0,0"
+                                                                       VerticalAlignment="Center"
+                                                                       Text="{DynamicResource Brightness_NitsUnit}"
+                                                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <wpfui:ToggleSwitch Grid.Column="2" IsChecked="{Binding IsBrightnessSyncEnabled}"
+                                                    VerticalAlignment="Top"
+                                                    ToolTip="{DynamicResource Home_Brightness_ToggleTip}"/>
+                            </Grid>
+                        </wpfui:Card>
+
                         <Grid Margin="0,0,0,16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="Monitor Mappings" FontSize="20" FontWeight="Medium" VerticalAlignment="Center"/>
+                            <TextBlock Text="{DynamicResource Home_MonitorMappings}" FontSize="20" FontWeight="Medium" VerticalAlignment="Center"/>
                             <wpfui:Button Grid.Column="1" Icon="ArrowClockwise24" Appearance="Transparent"
-                                          Command="{Binding RefreshCommand}" ToolTip="Refresh monitors and audio devices"
+                                          Command="{Binding RefreshCommand}" ToolTip="{DynamicResource Home_Refresh_Tip}"
                                           Width="32" Height="32"/>
                         </Grid>
 
                         <ItemsControl ItemsSource="{Binding Monitors}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <wpfui:Card Margin="0,0,0,8" Padding="16">
+                                    <wpfui:Card Margin="0,0,0,8" Padding="16"
+                                                Visibility="{Binding IsCardVisible, Converter={StaticResource BoolToVis}}">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto"/>
@@ -190,11 +346,17 @@
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock Text="{Binding DisplayName}" FontSize="14" FontWeight="SemiBold"/>
-                                                    <Border Margin="8,0,0,0" Padding="8,2" CornerRadius="4"
+                                                    <Border Margin="8,0,0,0" Padding="7,1" CornerRadius="9" VerticalAlignment="Center"
                                                             Background="{DynamicResource AccentFillColorDefaultBrush}"
-                                                            Visibility="{Binding Monitor.IsPrimary, Converter={StaticResource BoolToVis}}">
-                                                        <TextBlock Text="PRIMARY" FontSize="10" FontWeight="SemiBold"
+                                                            Visibility="{Binding HasTag, Converter={StaticResource BoolToVis}}">
+                                                        <TextBlock Text="{Binding Tag}" FontSize="10.5" FontWeight="Medium"
                                                                    Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"/>
+                                                    </Border>
+                                                    <Border Margin="8,0,0,0" Padding="7,1" CornerRadius="9" VerticalAlignment="Center"
+                                                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                                            Visibility="{Binding IsDualLink, Converter={StaticResource BoolToVis}}">
+                                                        <TextBlock Text="{DynamicResource LD_DualLink_Badge}" FontSize="10.5" FontWeight="Medium"
+                                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                                                     </Border>
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding Monitor.DeviceName}" FontSize="11"
@@ -234,23 +396,23 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <TextBlock Text="Active Audio Sessions" FontSize="20" FontWeight="Medium" Margin="0,20,0,16"/>
+                        <TextBlock Text="{DynamicResource Home_ActiveSessions}" FontSize="20" FontWeight="Medium" Margin="0,20,0,16"/>
                     </StackPanel>
 
-                    <!-- Scrollable sessions card - only this scrolls internally -->
-                    <Border Grid.Row="1" Margin="24,0,24,16" MinHeight="80"
+                    <!-- Sessions card - grows with its content; the outer page-level ScrollViewer
+                         scrolls everything, so no inner ScrollViewer here (avoids nested
+                         scroll-wheel conflicts). -->
+                    <Border Grid.Row="1" MinHeight="80"
                             Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
                             BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1" CornerRadius="8">
                         <Grid>
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                          HorizontalScrollBarVisibility="Disabled">
-                                <!-- TabNavigation=Once: one Tab lands on the first focusable row, then
-                                     arrow keys navigate between rows — standard list-like keyboarding
-                                     without needing a ListBox wrapper and its selection visuals. -->
-                                <ItemsControl ItemsSource="{Binding ActiveSessions}"
-                                              KeyboardNavigation.TabNavigation="Once"
-                                              KeyboardNavigation.DirectionalNavigation="Contained">
+                            <!-- TabNavigation=Once: one Tab lands on the first focusable row, then
+                                 arrow keys navigate between rows — standard list-like keyboarding
+                                 without needing a ListBox wrapper and its selection visuals. -->
+                            <ItemsControl ItemsSource="{Binding ActiveSessions}"
+                                          KeyboardNavigation.TabNavigation="Once"
+                                          KeyboardNavigation.DirectionalNavigation="Contained">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <!-- Tag carries the row's session VM into the ContextMenu, which lives
@@ -284,9 +446,9 @@
                                                 </Border.Style>
                                                 <Border.ContextMenu>
                                                     <ContextMenu>
-                                                        <MenuItem x:Name="PinToDeviceMenu" Header="Pin to device"/>
+                                                        <MenuItem x:Name="PinToDeviceMenu" Header="{DynamicResource Menu_PinToDevice}"/>
                                                         <Separator x:Name="PinSeparator"/>
-                                                        <MenuItem x:Name="RemovePinMenu" Header="Remove pin"
+                                                        <MenuItem x:Name="RemovePinMenu" Header="{DynamicResource Menu_RemovePin}"
                                                                   Click="RemovePin_Click"/>
                                                     </ContextMenu>
                                                 </Border.ContextMenu>
@@ -313,7 +475,7 @@
                                                         <wpfui:SymbolIcon Symbol="Pin24" FontSize="14"
                                                                           Margin="0,0,6,0" VerticalAlignment="Center"
                                                                           Foreground="{DynamicResource SystemAccentColorPrimaryBrush}"
-                                                                          ToolTip="Pinned by an app override"
+                                                                          ToolTip="{DynamicResource Home_PinnedBadgeTip}"
                                                                           Visibility="{Binding IsOverridden, Converter={StaticResource BoolToVis}}"/>
                                                         <TextBlock Text="{Binding AudioDeviceName}"
                                                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -324,21 +486,521 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                            </ScrollViewer>
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Visibility="{Binding ActiveSessions.Count, Converter={StaticResource ZeroToVis}}"
                                         IsHitTestVisible="False">
                                 <wpfui:SymbolIcon Symbol="Speaker224" FontSize="32" Opacity="0.3"
                                                   HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                <TextBlock Text="No active audio sessions" FontSize="13"
+                                <TextBlock Text="{DynamicResource Home_EmptySessions_Title}" FontSize="13"
                                            Foreground="{DynamicResource TextFillColorTertiaryBrush}" HorizontalAlignment="Center"/>
-                                <TextBlock Text="Enable routing and play some audio" FontSize="11"
+                                <TextBlock Text="{DynamicResource Home_EmptySessions_Desc}" FontSize="11"
                                            Foreground="{DynamicResource TextFillColorDisabledBrush}"
                                            HorizontalAlignment="Center" Margin="0,4,0,0"/>
                             </StackPanel>
                         </Grid>
                     </Border>
-                </Grid>
+                    </Grid>
+                </ScrollViewer>
+            </Border>
+
+            <!-- ═══ SCREEN DETAILS PAGE ═══ -->
+            <Border x:Name="MonitorDetailsPage" Visibility="Collapsed" Opacity="0">
+                <Border.RenderTransform><TranslateTransform/></Border.RenderTransform>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="24,20,24,8">
+                    <StackPanel>
+                        <TextBlock Text="{DynamicResource SD_Title}" FontSize="20" FontWeight="Medium" Margin="0,0,0,4"/>
+                        <TextBlock Text="{DynamicResource SD_BrightnessNote}" FontSize="11" Margin="0,0,0,16"
+                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+
+                        <!-- Color sync: one tint for the whole desk -->
+                        <wpfui:CardControl Margin="0,0,0,16">
+                            <wpfui:CardControl.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <wpfui:SymbolIcon Symbol="Color24" FontSize="22"
+                                                      Margin="0,0,14,0" VerticalAlignment="Center"
+                                                      Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource SD_ColorSync_Title}" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{DynamicResource SD_ColorSync_Desc}" FontSize="11"
+                                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </wpfui:CardControl.Header>
+                            <wpfui:ToggleSwitch IsChecked="{Binding IsColorSyncEnabled}"/>
+                        </wpfui:CardControl>
+
+                        <ItemsControl ItemsSource="{Binding MonitorDetails}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <wpfui:Card Margin="0,0,0,20" Padding="16"
+                                                Visibility="{Binding IsCardVisible, Converter={StaticResource BoolToVis}}">
+                                        <StackPanel>
+                                            <!-- ── Header: numbered badge + name + tag + rename ── -->
+                                            <Grid Margin="0,0,0,12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <Border Grid.Column="0" Width="32" Height="32" CornerRadius="16"
+                                                        Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                                        VerticalAlignment="Center" Margin="0,0,12,0">
+                                                    <TextBlock Text="{Binding MonitorNumber}" FontSize="15" FontWeight="SemiBold"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"/>
+                                                </Border>
+
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding DisplayName}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+
+                                                        <!-- User label chip ("工作屏" / "便携屏") -->
+                                                        <Border Margin="8,0,0,0" Padding="7,1" CornerRadius="9"
+                                                                VerticalAlignment="Center"
+                                                                Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                                                Visibility="{Binding HasTag, Converter={StaticResource BoolToVis}}">
+                                                            <TextBlock Text="{Binding Tag}" FontSize="10.5" FontWeight="Medium"
+                                                                       Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"/>
+                                                        </Border>
+                                                        <Border Margin="8,0,0,0" Padding="7,1" CornerRadius="9"
+                                                                VerticalAlignment="Center"
+                                                                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                                                Visibility="{Binding IsDualLink, Converter={StaticResource BoolToVis}}">
+                                                            <TextBlock Text="{DynamicResource LD_DualLink_Badge}" FontSize="10.5" FontWeight="Medium"
+                                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                        </Border>
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding Monitor.DeviceName}" FontSize="11"
+                                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,2,0,0"/>
+                                                    <TextBlock Text="{Binding DualLinkText}" FontSize="11" TextWrapping="Wrap"
+                                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,2,0,0"
+                                                               Visibility="{Binding IsDualLink, Converter={StaticResource BoolToVis}}"/>
+                                                </StackPanel>
+
+                                                <!-- Rename / tag editor toggle -->
+                                                <wpfui:Button Grid.Column="2" Icon="Edit24" Appearance="Transparent"
+                                                              Width="32" Height="32" VerticalAlignment="Top"
+                                                              Command="{Binding BeginEditIdentityCommand}"
+                                                              AutomationProperties.Name="{DynamicResource Mon_RenameTip}"
+                                                              ToolTip="{DynamicResource Mon_RenameTip}"/>
+                                            </Grid>
+
+                                            <!-- ── Inline identity editor ── -->
+                                            <Grid Margin="44,0,0,12"
+                                                  Visibility="{Binding IsEditingIdentity, Converter={StaticResource BoolToVis}}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                                    <TextBlock Text="{DynamicResource Mon_NameLabel}" FontSize="11" Margin="0,0,0,4"
+                                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                                    <TextBox Height="32" VerticalContentAlignment="Center" Padding="8,0"
+                                                             Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
+                                                             ToolTip="{DynamicResource Mon_NamePlaceholder}"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                                                    <TextBlock Text="{DynamicResource Mon_TagLabel}" FontSize="11" Margin="0,0,0,4"
+                                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                                    <TextBox Height="32" VerticalContentAlignment="Center" Padding="8,0"
+                                                             Text="{Binding EditTag, UpdateSourceTrigger=PropertyChanged}"
+                                                             ToolTip="{DynamicResource Mon_TagPlaceholder}"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Bottom">
+                                                    <wpfui:Button Content="{DynamicResource Mon_Save}" Appearance="Primary"
+                                                                  Height="32" Command="{Binding SaveIdentityEditCommand}"/>
+                                                    <wpfui:Button Content="{DynamicResource Mon_Cancel}" Height="32" Margin="8,0,0,0"
+                                                                  Command="{Binding CancelIdentityEditCommand}"/>
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <!-- ── Facts: one compact digest line + panel model ── -->
+                                            <TextBlock Text="{Binding SummaryText}" FontSize="12" Margin="44,0,0,2"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                            <StackPanel Orientation="Horizontal" Margin="44,0,0,0">
+                                                <StackPanel.Style>
+                                                    <Style TargetType="StackPanel">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding PanelName}" Value="">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </StackPanel.Style>
+                                                <TextBlock Text="{DynamicResource SD_PanelName}" FontSize="11"
+                                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                                <TextBlock Text=": " FontSize="11"
+                                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                                <TextBlock Text="{Binding PanelName}" FontSize="11" TextWrapping="Wrap"
+                                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                            </StackPanel>
+                                            <Grid Margin="44,4,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{DynamicResource SD_PeakNits}" FontSize="12" VerticalAlignment="Center"
+                                                           Margin="0,2,8,2"
+                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                <!-- Read-only: DDC/CI cannot report physical nits, the value
+                                                     comes from the panel spec and is edited on the home page. -->
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding PeakNits}" FontSize="12" VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                                                    <TextBlock Text=" " FontSize="12"/>
+                                                    <TextBlock Text="{DynamicResource Brightness_NitsUnit}" FontSize="12" VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                </StackPanel>
+                                            </Grid>
+
+            <!-- ── Link diagnostics: two compact rows, two label/value pairs
+                 each (connector + bandwidth / power + USB). Fed by
+                 LinkDiagnosticsService (QueryDisplayConfig). Rows stay visible
+                 even when the connector couldn't be identified. -->
+            <Grid Margin="44,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Grid.ColumnSpan="4" Text="{DynamicResource SD_Link_Title}"
+                           FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="{DynamicResource SD_Link_Connection}" FontSize="12"
+                           VerticalAlignment="Center" Margin="0,1,8,1"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding LinkConnectionText}" FontSize="12"
+                           VerticalAlignment="Center" Margin="0,1,12,1" TextWrapping="Wrap"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="{DynamicResource SD_Link_Bandwidth}" FontSize="12"
+                           VerticalAlignment="Center" Margin="0,1,8,1"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding LinkBandwidthText}" FontSize="12"
+                           VerticalAlignment="Center" Margin="0,1,0,1" TextWrapping="Wrap"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="{DynamicResource SD_Link_Power}" FontSize="12"
+                           VerticalAlignment="Center" Margin="0,1,8,1"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding LinkPowerText}" FontSize="12"
+                           VerticalAlignment="Center" Margin="0,1,12,1" TextWrapping="Wrap"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="{DynamicResource SD_Link_Usb}" FontSize="12"
+                           VerticalAlignment="Center" Margin="0,1,8,1"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                <TextBlock Grid.Row="2" Grid.Column="3" Text="{Binding LinkUsbText}" FontSize="12"
+                           VerticalAlignment="Center" Margin="0,1,0,1" TextWrapping="Wrap"/>
+
+                <TextBlock Grid.Row="3" Grid.ColumnSpan="4" Text="{Binding LinkWarningText}" FontSize="12"
+                           TextWrapping="Wrap" Margin="0,3,0,0"
+                           Foreground="#FFB400"
+                           Visibility="{Binding LinkWarningText, Converter={StaticResource StringToVisibilityConverter}}"/>
+            </Grid>
+
+            <Separator Margin="0,12,0,12"/>
+            <TextBlock Text="{DynamicResource SD_ControlsTitle}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
+
+                                            <!-- ── DDC controls (hidden when the panel ignores DDC/CI) ── -->
+                                            <StackPanel>
+                                                <StackPanel.Style>
+                                                    <Style TargetType="StackPanel">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding DdcAvailable}" Value="False">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </StackPanel.Style>
+
+                                                <Grid Margin="0,0,0,10">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="24"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Grid Grid.Column="0">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="112"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="44"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{DynamicResource SD_Contrast}" FontSize="12" VerticalAlignment="Center"/>
+                                                        <Slider Grid.Column="1" Minimum="0" Maximum="100"
+                                                                Value="{Binding Contrast, Mode=TwoWay}" VerticalAlignment="Center"
+                                                                IsEnabled="{Binding DdcAvailable}"/>
+                                                        <TextBlock Grid.Column="2" Text="{Binding Contrast, StringFormat={}{0}%}" FontSize="12"
+                                                                   VerticalAlignment="Center" TextAlignment="Right"/>
+                                                    </Grid>
+                                                    <Grid Grid.Column="2">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="112"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="44"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{DynamicResource SD_Volume}" FontSize="12" VerticalAlignment="Center"/>
+                                                        <Slider Grid.Column="1" Minimum="0" Maximum="100"
+                                                                Value="{Binding SpeakerVolume, Mode=TwoWay}" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="2" Text="{Binding SpeakerVolume, StringFormat={}{0}%}" FontSize="12"
+                                                                   VerticalAlignment="Center" TextAlignment="Right"/>
+                                                    </Grid>
+                                                </Grid>
+
+                                                <!-- Input source | Color mode -->
+                                                <Grid Margin="0,0,0,10">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="24"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                        <Grid Grid.Column="0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="112"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Text="{DynamicResource SD_Input}" FontSize="12" VerticalAlignment="Center"/>
+                                                            <ComboBox Grid.Column="1" MinWidth="120" HorizontalAlignment="Stretch"
+                                                                      ItemsSource="{Binding InputOptions}"
+                                                                      SelectedItem="{Binding SelectedInput}"
+                                                                      DisplayMemberPath="Label"
+                                                                      Visibility="{Binding HasInputOptions, Converter={StaticResource BoolToVis}}"/>
+                                                            <TextBlock Grid.Column="1" Text="{DynamicResource SD_NoInput}" FontSize="12"
+                                                                       VerticalAlignment="Center"
+                                                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                                                       ToolTip="{DynamicResource SD_NoInputTip}">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding InputOptions.Count}" Value="0">
+                                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </Grid>
+                                                    <Grid Grid.Column="2">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="112"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{DynamicResource SD_ColorMode}" FontSize="12" VerticalAlignment="Center"/>
+                                                        <ComboBox Grid.Column="1" MinWidth="120" HorizontalAlignment="Stretch"
+                                                                  ItemsSource="{Binding PresetOptions}"
+                                                                  SelectedItem="{Binding SelectedPreset}"
+                                                                  DisplayMemberPath="Label"/>
+                                                    </Grid>
+                                                </Grid>
+
+                                                <!-- Extra rows discovered on this panel: RGB gain,
+                                                     sharpness, mute, scene mode ... two per row -->
+                                                <ItemsControl ItemsSource="{Binding ExtraControls}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <UniformGrid Columns="2"/>
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Grid Margin="0,0,20,10">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="112"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="40"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Text="{Binding Label}" FontSize="12"
+                                                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                                           Foreground="{Binding AccentBrush, TargetNullValue={StaticResource TextFillColorPrimaryBrush}}"/>
+                                                                <Slider Grid.Column="1" Minimum="0" Maximum="{Binding MaxValue}"
+                                                                        Value="{Binding Value, Mode=TwoWay}" VerticalAlignment="Center"
+                                                                        Visibility="{Binding SliderVisibility}"
+                                                                        attached:SliderAccent.Accent="{Binding AccentColor}"/>
+                                                                <ComboBox Grid.Column="1" MinWidth="100" HorizontalAlignment="Stretch"
+                                                                          ItemsSource="{Binding Options}"
+                                                                          SelectedItem="{Binding SelectedOption}"
+                                                                          DisplayMemberPath="Label"
+                                                                          Visibility="{Binding ChoiceVisibility}"/>
+                                                                <TextBlock Grid.Column="2" Text="{Binding ValueText}" FontSize="12"
+                                                                           VerticalAlignment="Center" TextAlignment="Right"
+                                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+
+                                                <!-- One-time probe of preset values takes a few seconds -->
+                                                <TextBlock Text="{DynamicResource SD_Probing}" FontSize="11" Margin="0,2,0,0"
+                                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsProbing}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+
+                                            <!-- Software color: gamma-ramp based, works even on
+                                                 panels that expose no DDC color control -->
+                                            <Separator Margin="0,6,0,10"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                <TextBlock Text="{DynamicResource SD_SoftwareColorTitle}" FontSize="13" FontWeight="SemiBold"
+                                                           VerticalAlignment="Center"/>
+                                                <TextBlock Text="{DynamicResource SD_SoftwareColorHint}" FontSize="11" Margin="8,1,0,0"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                            </StackPanel>
+
+                                            <Grid Margin="0,0,0,6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="24"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Grid Grid.Column="0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="112"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="52"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{DynamicResource SD_ColorTemp}" FontSize="12" VerticalAlignment="Center"/>
+                                                    <Slider Grid.Column="1" VerticalAlignment="Center"
+                                                            Minimum="4000" Maximum="9300"
+                                                            SmallChange="100" LargeChange="500" TickFrequency="100" IsSnapToTickEnabled="True"
+                                                            Value="{Binding ColorTemp, Mode=TwoWay}"/>
+                                                    <TextBlock Grid.Column="2" Text="{Binding ColorTempText}" FontSize="12"
+                                                               VerticalAlignment="Center" TextAlignment="Right"
+                                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                </Grid>
+                                                <Grid Grid.Column="2">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="112"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="52"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{DynamicResource SD_EyeCareLevel}" FontSize="12" VerticalAlignment="Center"/>
+                                                    <Slider Grid.Column="1" Minimum="0" Maximum="100" VerticalAlignment="Center"
+                                                            Value="{Binding EyeCare, Mode=TwoWay}"/>
+                                                    <TextBlock Grid.Column="2" Text="{Binding EyeCareText}" FontSize="12"
+                                                               VerticalAlignment="Center" TextAlignment="Right"
+                                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                </Grid>
+                                            </Grid>
+
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                <TextBlock Text="{DynamicResource SD_ColorTempHint}" FontSize="11" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                                <wpfui:Button Content="{DynamicResource SD_ResetColor}" FontSize="12" Margin="12,0,0,0"
+                                                              Padding="10,2" Appearance="Secondary"
+                                                              Command="{Binding ResetColorCommand}"/>
+                                            </StackPanel>
+
+                                            <!-- OSD features this panel refuses to expose over DDC -->
+                                            <TextBlock Text="{Binding HardwareOnlyText}" FontSize="12" Margin="0,10,0,0" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasHardwareOnly}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+
+                                            <!-- Not-DDC note -->
+                                            <TextBlock Text="{DynamicResource SD_NoDdc}" FontSize="11" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding DdcAvailable}" Value="False">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+
+                                            <!-- No-preset hint -->
+                                            <TextBlock Text="{DynamicResource SD_NoPreset}" FontSize="11" Margin="0,4,0,0"
+                                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding PresetOptions.Count}" Value="0">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+
+                                            <!-- ── Orientation ── -->
+                                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                                <TextBlock Text="{DynamicResource SD_Orientation}" FontSize="12" VerticalAlignment="Center"
+                                                           Margin="0,0,16,0" Width="114"/>
+                                                <wpfui:Button Content="{DynamicResource SD_Landscape}" Margin="0,0,8,0" MinWidth="88"
+                                                              Command="{Binding ApplyLandscapeCommand}"
+                                                              Appearance="Secondary"/>
+                                                <wpfui:Button Content="{DynamicResource SD_Portrait}" MinWidth="88"
+                                                              Command="{Binding ApplyPortraitCommand}"
+                                                              Appearance="Secondary"/>
+                                            </StackPanel>
+
+                                            <!-- ── Status line ── -->
+                                            <TextBlock FontSize="11" Margin="0,10,0,0" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Setter Property="Text" Value=""/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding StatusText}" Value="writefail">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                <Setter Property="Text" Value="{DynamicResource SD_WriteFail}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding StatusText}" Value="inputverify">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                <Setter Property="Text" Value="{DynamicResource SD_InputVerify}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding StatusText}" Value="rotatefail">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                <Setter Property="Text" Value="{DynamicResource SD_RotateFail}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding StatusText}" Value="notsupported">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                <Setter Property="Text" Value="{DynamicResource SD_NotSupported}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </wpfui:Card>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
             </Border>
 
             <!-- ═══ PINNED APPS PAGE ═══ -->
@@ -351,13 +1013,11 @@
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0" Margin="0,0,0,16">
-                        <TextBlock Text="Pinned Apps" FontSize="20" FontWeight="Medium"/>
+                        <TextBlock Text="{DynamicResource Pinned_Title}" FontSize="20" FontWeight="Medium"/>
                         <TextBlock TextWrapping="Wrap" FontSize="12"
                                    Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                                   Margin="0,4,0,0">
-                            Pinned apps always play through the chosen device, regardless of which monitor
-                            their window is on. Right-click an Active Session on the Home page to pin it.
-                        </TextBlock>
+                                   Margin="0,4,0,0"
+                                   Text="{DynamicResource Pinned_Desc}"/>
                     </StackPanel>
 
                     <Border Grid.Row="1" MinHeight="80"
@@ -401,7 +1061,7 @@
                                                                FontSize="13" VerticalAlignment="Center"/>
                                                     <wpfui:Button Grid.Column="3" Icon="Delete24"
                                                                   Appearance="Transparent" Width="32" Height="32"
-                                                                  ToolTip="Remove pin"
+                                                                  ToolTip="{DynamicResource Pinned_RemoveTip}"
                                                                   Tag="{Binding}"
                                                                   Click="RemovePinFromList_Click"/>
                                                 </Grid>
@@ -415,9 +1075,9 @@
                                         IsHitTestVisible="False">
                                 <wpfui:SymbolIcon Symbol="Pin24" FontSize="32" Opacity="0.3"
                                                   HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                <TextBlock Text="No pinned apps" FontSize="13"
+                                <TextBlock Text="{DynamicResource Pinned_Empty_Title}" FontSize="13"
                                            Foreground="{DynamicResource TextFillColorTertiaryBrush}" HorizontalAlignment="Center"/>
-                                <TextBlock Text="Right-click an Active Session on Home to pin it" FontSize="11"
+                                <TextBlock Text="{DynamicResource Pinned_Empty_Desc}" FontSize="11"
                                            Foreground="{DynamicResource TextFillColorDisabledBrush}"
                                            HorizontalAlignment="Center" Margin="0,4,0,0"/>
                             </StackPanel>
@@ -429,9 +1089,9 @@
             <!-- ═══ SETTINGS PAGE ═══ -->
             <Border x:Name="SettingsPage" Visibility="Collapsed" Opacity="0">
                 <Border.RenderTransform><TranslateTransform/></Border.RenderTransform>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24,20,24,8">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="24,20,24,8">
                     <StackPanel>
-                        <TextBlock Text="Settings" FontSize="20" FontWeight="Medium" Margin="0,0,0,16"/>
+                        <TextBlock Text="{DynamicResource Settings_Title}" FontSize="20" FontWeight="Medium" Margin="0,0,0,16"/>
 
                         <!-- Theme -->
                         <wpfui:CardControl Margin="0,0,0,8">
@@ -441,14 +1101,34 @@
                                                       Margin="0,0,14,0" VerticalAlignment="Center"
                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Theme" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Set light theme, dark theme or follow system settings" FontSize="11"
+                                        <TextBlock Text="{DynamicResource Settings_Theme_Title}" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{DynamicResource Settings_Theme_Desc}" FontSize="11"
                                                    Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </StackPanel>
                             </wpfui:CardControl.Header>
                             <ComboBox ItemsSource="{Binding ThemeOptions}"
                                       SelectedIndex="{Binding SelectedThemeIndex}"
+                                      MinWidth="120"/>
+                        </wpfui:CardControl>
+
+                        <!-- Language — entries stay in their own language on purpose
+                             so a user who switched to the wrong one can switch back. -->
+                        <wpfui:CardControl Margin="0,0,0,8">
+                            <wpfui:CardControl.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <wpfui:SymbolIcon Symbol="LocalLanguage24" FontSize="20"
+                                                      Margin="0,0,14,0" VerticalAlignment="Center"
+                                                      Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource Settings_Language_Title}" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{DynamicResource Settings_Language_Desc}" FontSize="11"
+                                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </wpfui:CardControl.Header>
+                            <ComboBox ItemsSource="{Binding LanguageOptions}"
+                                      SelectedIndex="{Binding SelectedLanguageIndex}"
                                       MinWidth="120"/>
                         </wpfui:CardControl>
 
@@ -460,8 +1140,8 @@
                                                       Margin="0,0,14,0" VerticalAlignment="Center"
                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Run at startup" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Automatically start when you sign in to Windows" FontSize="11"
+                                        <TextBlock Text="{DynamicResource Settings_AutoStart_Title}" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{DynamicResource Settings_AutoStart_Desc}" FontSize="11"
                                                    Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </StackPanel>
@@ -477,8 +1157,8 @@
                                                       Margin="0,0,14,0" VerticalAlignment="Center"
                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Minimize on close" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Minimize to system tray instead of closing" FontSize="11"
+                                        <TextBlock Text="{DynamicResource Settings_MinimizeOnClose_Title}" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{DynamicResource Settings_MinimizeOnClose_Desc}" FontSize="11"
                                                    Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </StackPanel>
@@ -494,13 +1174,31 @@
                                                       Margin="0,0,14,0" VerticalAlignment="Center"
                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Start minimized" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Launch hidden in the system tray" FontSize="11"
+                                        <TextBlock Text="{DynamicResource Settings_StartMinimized_Title}" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{DynamicResource Settings_StartMinimized_Desc}" FontSize="11"
                                                    Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </StackPanel>
                             </wpfui:CardControl.Header>
                             <wpfui:ToggleSwitch IsChecked="{Binding StartMinimized}"/>
+                        </wpfui:CardControl>
+
+                        <!-- Keep audio device when window is hidden -->
+                        <wpfui:CardControl Margin="0,0,0,8">
+                            <wpfui:CardControl.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <wpfui:SymbolIcon Symbol="Speaker224" FontSize="20"
+                                                      Margin="0,0,14,0" VerticalAlignment="Center"
+                                                      Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource Settings_HoldRouting_Title}" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{DynamicResource Settings_HoldRouting_Desc}" FontSize="11"
+                                                   TextWrapping="Wrap" MaxWidth="460" HorizontalAlignment="Left"
+                                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </wpfui:CardControl.Header>
+                            <wpfui:ToggleSwitch IsChecked="{Binding HoldWhenWindowHidden}"/>
                         </wpfui:CardControl>
                     </StackPanel>
                 </ScrollViewer>
@@ -509,9 +1207,9 @@
             <!-- ═══ ABOUT PAGE ═══ -->
             <Border x:Name="AboutPage" Visibility="Collapsed" Opacity="0">
                 <Border.RenderTransform><TranslateTransform/></Border.RenderTransform>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24,20,24,8">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="24,20,24,8">
                     <StackPanel>
-                        <TextBlock Text="About" FontSize="20" FontWeight="Medium" Margin="0,0,0,16"/>
+                        <TextBlock Text="{DynamicResource About_Title}" FontSize="20" FontWeight="Medium" Margin="0,0,0,16"/>
                         <wpfui:Card Padding="24">
                             <StackPanel>
                                 <!-- ── Header: icon + identity block ────────────────
@@ -533,7 +1231,7 @@
                                            VerticalAlignment="Center" Margin="0,0,16,0"
                                            RenderOptions.BitmapScalingMode="HighQuality"/>
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="ScreenSound" FontSize="18" FontWeight="SemiBold"/>
+                                        <TextBlock Text="SimpleScreen" FontSize="18" FontWeight="SemiBold"/>
                                         <TextBlock Text="{Binding AppVersionDisplay}" FontSize="12"
                                                    Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,2,0,0"/>
                                         <TextBlock Text="{Binding CopyrightDisplay}" FontSize="12"
@@ -543,7 +1241,9 @@
                                 <Border Height="1" Background="{DynamicResource ControlStrokeColorDefaultBrush}" Margin="0,0,0,16"/>
 
                                 <!-- ── Links ────────────────────────────────────────
-                                     Two static GitHub URLs; /releases/latest redirects
+                                     Two static GitHub URLs pointing at our own repo
+                                     (xunhualu/SimpleScreen), not the upstream
+                                     ScreenSound fork. /releases/latest redirects
                                      to the current tag so we don't have to bake a
                                      version into the URL here.
 
@@ -553,14 +1253,14 @@
                                      buttons. No margin between them — the reduced
                                      padding alone gives enough breathing room.
                                 -->
-                                <TextBlock Text="Links" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                <wpfui:Hyperlink Content="Project website on GitHub"
+                                <TextBlock Text="{DynamicResource About_Links}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <wpfui:Hyperlink Content="{DynamicResource About_ProjectSite}"
                                                  Icon="Link24"
-                                                 NavigateUri="https://github.com/twibster/ScreenSound"
+                                                 NavigateUri="https://github.com/xunhualu/SimpleScreen"
                                                  HorizontalAlignment="Left" Padding="8,2"/>
-                                <wpfui:Hyperlink Content="Latest release on GitHub"
+                                <wpfui:Hyperlink Content="{DynamicResource About_LatestRelease}"
                                                  Icon="Link24"
-                                                 NavigateUri="https://github.com/twibster/ScreenSound/releases/latest"
+                                                 NavigateUri="https://github.com/xunhualu/SimpleScreen/releases/latest"
                                                  HorizontalAlignment="Left" Padding="8,2"/>
 
                                 <!-- ── Update check ─────────────────────────────────
@@ -573,7 +1273,7 @@
                                      URL.
                                 -->
                                 <Border Height="1" Background="{DynamicResource ControlStrokeColorDefaultBrush}" Margin="0,20,0,16"/>
-                                <TextBlock Text="Updates" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <TextBlock Text="{DynamicResource About_Updates}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
                                 <!--
                                     Grid (rather than a horizontal StackPanel) so the status
                                     TextBlock can actually wrap to the content card's width.
@@ -589,7 +1289,7 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <wpfui:Button Grid.Column="0"
-                                                  Content="Check for updates"
+                                                  Content="{DynamicResource About_CheckForUpdates}"
                                                   Icon="ArrowSync24"
                                                   Command="{Binding CheckForUpdatesCommand}"
                                                   IsEnabled="{Binding IsCheckingForUpdate, Converter={StaticResource InverseBooleanConverter}}"/>
@@ -604,85 +1304,278 @@
                                 <!-- Hyperlink only shown when an update is available (LatestReleaseUrl is
                                      non-empty). wpfui:Hyperlink derives from wpfui:Button and, on click,
                                      opens NavigateUri via ShellExecute — no Command wiring needed. -->
-                                <wpfui:Hyperlink Content="Open release page"
+                                <wpfui:Hyperlink Content="{DynamicResource About_OpenReleasePage}"
                                                  Icon="Open24"
                                                  NavigateUri="{Binding LatestReleaseUrl}"
                                                  HorizontalAlignment="Left"
                                                  Visibility="{Binding LatestReleaseUrl, Converter={StaticResource StringToVisibilityConverter}}"/>
                             </StackPanel>
                         </wpfui:Card>
-                    </StackPanel>
-                </ScrollViewer>
-            </Border>
 
-            <!-- ═══ DONATE PAGE ═══ -->
-            <Border x:Name="DonatePage" Visibility="Collapsed" Opacity="0">
-                <Border.RenderTransform><TranslateTransform/></Border.RenderTransform>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24,20,24,8">
-                    <StackPanel>
-                        <TextBlock Text="Donate" FontSize="20" FontWeight="Medium" Margin="0,0,0,16"/>
-                        <wpfui:Card Padding="24">
+                        <!-- ── About-this-build card (merged from the retired Donate tab):
+                             accent icon + identity block header, same pattern as the
+                             support card below. ── -->
+                        <wpfui:Card Padding="24" Margin="0,16,0,0">
                             <StackPanel>
-                                <!-- ── Header: accent heart + section title ─────────
-                                     Mirrors the About page's header pattern (icon +
-                                     identity block) so the two bottom-cluster pages
-                                     read as visually related.
-                                -->
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                    <wpfui:SymbolIcon Symbol="Person24" FontSize="28"
+                                                      Foreground="{DynamicResource SystemAccentColorPrimaryBrush}"
+                                                      VerticalAlignment="Center" Margin="0,0,14,0"/>
+                                    <TextBlock Text="{DynamicResource Donate_AboutMeTitle}" FontSize="16" FontWeight="SemiBold"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock TextWrapping="Wrap" FontSize="13"
+                                           LineHeight="21" LineStackingStrategy="BlockLineHeight"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                           Text="{DynamicResource Donate_AboutMeDesc}"/>
+                            </StackPanel>
+                        </wpfui:Card>
+
+                        <!-- ── Support card (merged from the retired Donate tab). Placed below
+                             the maintainer card so this customized build introduces itself first. ── -->
+                        <wpfui:Card Padding="24" Margin="0,16,0,0">
+                            <StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
                                     <wpfui:SymbolIcon Symbol="Heart24" FontSize="28"
                                                       Foreground="{DynamicResource SystemAccentColorPrimaryBrush}"
                                                       VerticalAlignment="Center" Margin="0,0,14,0"/>
-                                    <TextBlock Text="Support ScreenSound" FontSize="16" FontWeight="SemiBold"
+                                    <TextBlock Text="{DynamicResource Donate_SupportTitle}" FontSize="16" FontWeight="SemiBold"
                                                VerticalAlignment="Center"/>
                                 </StackPanel>
 
                                 <TextBlock TextWrapping="Wrap" FontSize="13"
                                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                           Margin="0,0,0,20">
-                                    ScreenSound is a solo developer project built in spare time. If it's
-                                    made your multi-monitor setup a little nicer, a one-off tip helps
-                                    justify the hours spent on bug fixes and new features — the app
-                                    stays free either way.
-                                </TextBlock>
+                                           Text="{DynamicResource Donate_Desc}"/>
+                            </StackPanel>
+                        </wpfui:Card>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
 
-                                <!-- Ko-fi CTA — the official branded "Buy me a coffee" button
-                                     image from Ko-fi's CDN, bundled as a WPF Resource (see
-                                     csproj) so it renders offline.
+            <!-- ═══ HOTKEY PAGE ═══ -->
+            <!-- Focusable so PreviewKeyDown fires even before any inner control has
+                 focus; the recording flow relies on the tunneling handler below. -->
+            <Border x:Name="HotkeyPage" Visibility="Collapsed" Opacity="0"
+                    Focusable="True" PreviewKeyDown="HotkeyPage_PreviewKeyDown"
+                    PreviewKeyUp="HotkeyPage_PreviewKeyUp">
+                <Border.RenderTransform><TranslateTransform/></Border.RenderTransform>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="24,20,24,8">
+                    <StackPanel>
+                        <TextBlock Text="{DynamicResource HK_Title}" FontSize="20" FontWeight="Medium" Margin="0,0,0,6"/>
+                        <TextBlock Text="{DynamicResource HK_TypingGuard}" FontSize="11" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,0,0,16"/>
 
-                                     The Template is stripped to a bare ContentPresenter so the
-                                     image IS the button face: no default WPF button chrome,
-                                     no hover rectangle painting over the yellow Ko-fi art.
-                                     Hover / pressed feedback is done via Opacity on the outer
-                                     Border so the branded colours stay intact while still
-                                     giving the user "this is clickable" affordance.
+                        <!-- ══ One row per feature. Each hotkey is split into TWO
+                             independently clickable cells: modifier cell + main-key
+                             cell. Click either cell, press a key, only that cell
+                             changes — no separate "record" button is needed. ══ -->
 
-                                     Cursor=Hand and AutomationProperties.Name give mouse +
-                                     screen-reader affordances the bare image wouldn't carry.
-                                     ToolTip spells out the destination so users can see where
-                                     a click will take them before committing. -->
-                                <Button Click="KofiDonate_Click"
-                                        HorizontalAlignment="Left" Cursor="Hand"
-                                        ToolTip="Opens ko-fi.com/twibster in your browser"
-                                        AutomationProperties.Name="Donate via Ko-fi — opens ko-fi.com/twibster in your browser">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border x:Name="Root" Background="Transparent">
-                                                <ContentPresenter HorizontalAlignment="Center"
-                                                                  VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="Root" Property="Opacity" Value="0.85"/>
-                                                </Trigger>
-                                                <Trigger Property="IsPressed" Value="True">
-                                                    <Setter TargetName="Root" Property="Opacity" Value="0.7"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                    <Image Source="/Assets/kofi-button.png" Width="200"
-                                           RenderOptions.BitmapScalingMode="HighQuality"/>
-                                </Button>
+                        <!-- ── Row 1 · window jump ── -->
+                        <wpfui:Card Padding="16,12" Margin="0,0,0,12">
+                            <StackPanel>
+                                <!-- Feature name, BOTH key cells and the enable
+                                     switch share a single horizontal row. -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <wpfui:SymbolIcon Grid.Column="0" Symbol="Desktop24" FontSize="20"
+                                                      Margin="0,0,10,0" VerticalAlignment="Center"
+                                                      Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                                                MinWidth="150" Margin="0,0,12,0">
+                                        <TextBlock Text="{DynamicResource HK_Move_Title}" FontSize="14"
+                                                   FontWeight="SemiBold" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <Button x:Name="MoveDetailsButton" Click="MoveDetailsButton_Click"
+                                                Margin="10,0,0,0" VerticalAlignment="Center"
+                                                Background="Transparent" BorderThickness="0" Padding="0,2"
+                                                Cursor="Hand" ToolTip="{DynamicResource HK_DetailsTip}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{DynamicResource HK_Details}" FontSize="11"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                                <TextBlock x:Name="MoveDetailsChevron"
+                                                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11"
+                                                           Text="&#xE70D;" Margin="4,0,0,0" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+
+                                    <Border Grid.Column="3" x:Name="JumpModifierBox"
+                                            CornerRadius="5" Height="34" Width="112"
+                                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                            BorderThickness="1" Cursor="Hand" VerticalAlignment="Center"
+                                            ToolTip="{DynamicResource HK_ModifierTip}"
+                                            MouseLeftButtonDown="JumpModifierBox_MouseLeftButtonDown">
+                                        <TextBlock Text="{Binding JumpModifierDisplay}" HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold"/>
+                                    </Border>
+
+                                    <TextBlock Grid.Column="4" Text="+" FontSize="14" Margin="10,0"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+
+                                    <Border Grid.Column="5" x:Name="JumpKeyBox"
+                                            CornerRadius="5" Height="34" Width="112"
+                                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                            BorderThickness="1" Cursor="Hand" VerticalAlignment="Center"
+                                            ToolTip="{DynamicResource HK_KeyBoxTip}"
+                                            MouseLeftButtonDown="JumpKeyBox_MouseLeftButtonDown">
+                                        <TextBlock Text="{Binding JumpKeyDisplay}" HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold"/>
+                                    </Border>
+
+                                </Grid>
+
+                                <!-- Switches get their own row: two of them side by side
+                                     would overflow the card on a narrow window. -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                                            Margin="0,8,0,0">
+                                    <TextBlock Text="{DynamicResource HK_Switch_Hotkey}" FontSize="11"
+                                               VerticalAlignment="Center" Margin="0,0,6,0"
+                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                    <wpfui:ToggleSwitch IsChecked="{Binding IsJumpHotkeyEnabled}"
+                                                        VerticalAlignment="Center"/>
+                                </StackPanel>
+
+                                <!-- Only transient messages and the expanded
+                                     description ever occupy a second line. -->
+                                <StackPanel Margin="0,6,0,0">
+                                    <TextBlock x:Name="HotkeyRecordStatus" Text="{DynamicResource HK_Recording}"
+                                               FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                                               Foreground="{DynamicResource SystemAccentColorPrimaryBrush}"
+                                               Visibility="Collapsed"/>
+                                    <TextBlock Text="{Binding HotkeyStatus}" FontSize="11" TextWrapping="Wrap"
+                                               Foreground="#FFB400" Margin="0,2,0,0"
+                                               Visibility="{Binding HotkeyStatus, Converter={StaticResource StringToVisibilityConverter}}"/>
+                                    <StackPanel x:Name="MoveDetailsPanel" Margin="0,6,0,0" Visibility="Collapsed">
+                                        <TextBlock Text="{DynamicResource HK_Move_Desc}" FontSize="11"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                        <TextBlock Text="{DynamicResource HK_Key_Desc}" FontSize="11"
+                                                   TextWrapping="Wrap" Margin="0,6,0,0"
+                                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </wpfui:Card>
+
+                        <!-- ── Row 2 · layout tiling ── -->
+                        <wpfui:Card Padding="16,12" Margin="0,0,0,12">
+                            <StackPanel>
+                                <!-- Feature name, BOTH key cells and the enable
+                                     switch share a single horizontal row. -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <wpfui:SymbolIcon Grid.Column="0" Symbol="Desktop24" FontSize="20"
+                                                      Margin="0,0,10,0" VerticalAlignment="Center"
+                                                      Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                                                MinWidth="150" Margin="0,0,12,0">
+                                        <TextBlock Text="{DynamicResource HK_Auto_Title}" FontSize="14"
+                                                   FontWeight="SemiBold" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <Button x:Name="ArrangeDetailsButton" Click="ArrangeDetailsButton_Click"
+                                                Margin="10,0,0,0" VerticalAlignment="Center"
+                                                Background="Transparent" BorderThickness="0" Padding="0,2"
+                                                Cursor="Hand" ToolTip="{DynamicResource HK_DetailsTip}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{DynamicResource HK_Details}" FontSize="11"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                                <TextBlock x:Name="ArrangeDetailsChevron"
+                                                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11"
+                                                           Text="&#xE70D;" Margin="4,0,0,0" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+
+                                    <Border Grid.Column="3" x:Name="ArrangeModifierBox"
+                                            CornerRadius="5" Height="34" Width="112"
+                                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                            BorderThickness="1" Cursor="Hand" VerticalAlignment="Center"
+                                            ToolTip="{DynamicResource HK_ModifierTip}"
+                                            MouseLeftButtonDown="ArrangeModifierBox_MouseLeftButtonDown">
+                                        <TextBlock Text="{Binding ArrangeModifierDisplay}" HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold"/>
+                                    </Border>
+
+                                    <TextBlock Grid.Column="4" Text="+" FontSize="14" Margin="10,0"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+
+                                    <Border Grid.Column="5" x:Name="ArrangeKeyBox"
+                                            CornerRadius="5" Height="34" Width="112"
+                                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                            BorderThickness="1" Cursor="Hand" VerticalAlignment="Center"
+                                            ToolTip="{DynamicResource HK_KeyBoxTip}"
+                                            MouseLeftButtonDown="ArrangeKeyBox_MouseLeftButtonDown">
+                                        <TextBlock Text="{Binding ArrangeKeyDisplay}" HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold"/>
+                                    </Border>
+
+                                </Grid>
+
+                                <!-- TWO independent switches: one for the U hotkey,
+                                     one for the no-key automatic tiling watcher. -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                                            Margin="0,8,0,0">
+                                    <TextBlock Text="{DynamicResource HK_Switch_Hotkey}" FontSize="11"
+                                               VerticalAlignment="Center" Margin="0,0,6,0"
+                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                               ToolTip="{DynamicResource HK_Switch_HotkeyTip}"/>
+                                    <wpfui:ToggleSwitch IsChecked="{Binding IsArrangeHotkeyEnabled}"
+                                                        VerticalAlignment="Center"
+                                                        ToolTip="{DynamicResource HK_Switch_HotkeyTip}"/>
+                                    <TextBlock Text="{DynamicResource HK_Switch_Auto}" FontSize="11"
+                                               VerticalAlignment="Center" Margin="14,0,6,0"
+                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                               ToolTip="{DynamicResource HK_Switch_AutoTip}"/>
+                                    <wpfui:ToggleSwitch IsChecked="{Binding IsAutoArrangeEnabled}"
+                                                        VerticalAlignment="Center"
+                                                        ToolTip="{DynamicResource HK_Switch_AutoTip}"/>
+                                </StackPanel>
+
+                                <!-- Only transient messages and the expanded
+                                     description ever occupy a second line. -->
+                                <StackPanel Margin="0,6,0,0">
+                                    <TextBlock x:Name="ArrangeRecordStatus" Text="{DynamicResource HK_Recording}"
+                                               FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                                               Foreground="{DynamicResource SystemAccentColorPrimaryBrush}"
+                                               Visibility="Collapsed"/>
+                                    <TextBlock Text="{Binding ArrangeHotkeyStatus}" FontSize="11" TextWrapping="Wrap"
+                                               Foreground="#FFB400" Margin="0,2,0,0"
+                                               Visibility="{Binding ArrangeHotkeyStatus, Converter={StaticResource StringToVisibilityConverter}}"/>
+                                    <StackPanel x:Name="ArrangeDetailsPanel" Margin="0,6,0,0" Visibility="Collapsed">
+                                        <TextBlock Text="{DynamicResource HK_Auto_Desc}" FontSize="11"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                        <TextBlock Text="{DynamicResource HK_ArrangeKey_Desc}" FontSize="11"
+                                                   TextWrapping="Wrap" Margin="0,6,0,0"
+                                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                    </StackPanel>
+                                </StackPanel>
                             </StackPanel>
                         </wpfui:Card>
                     </StackPanel>
