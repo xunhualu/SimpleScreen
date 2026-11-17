@@ -166,17 +166,25 @@ public static class WindowScaleService
     /// <c>Enum\DISPLAY\&lt;model&gt;</c>, so after extracting the model we
     /// enumerate that branch and take the first instance with a valid EDID.
     /// </summary>
-    // Some portable panels ship a template EDID reused from a larger
-    // desktop model. HIV0160 (2560x1600, 16:10) reports 34 x 22 cm but
-    // measures 30.2 x 18.8 cm with a ruler (~11 % off), which makes its
-    // computed PPI identical to a 34 cm 2560x1440 panel and silently
-    // disables the density correction. Windows cannot detect this, so
-    // keep tape-measured corrections for known liars here. User entries
-    // in AppSettings.MonitorWidthCm still take precedence (see GetRealPpi).
+    // Some panels ship a template EDID with a wrong viewable size. Windows
+    // cannot detect this, so keep measured/nominal corrections here. User
+    // entries in AppSettings.MonitorWidthCm still take precedence
+    // (see GetRealPpi).
+    //
+    // HIV0160 (14" 2560x1600, 16:10) reports 34 x 22 cm but measures
+    // 30.2 x 18.8 cm with a ruler (~11 % off) — a reused desktop template.
+    // Without this, its computed PPI matches a 34 cm 2560x1440 panel and the
+    // density correction is silently skipped.
+    //
+    // BOE0A07 (15.6" 2560x1440, 16:9 laptop panel) reports 34 cm. Its nominal
+    // diagonal implies 15.6 * 16/sqrt(16^2+9^2) = 34.5 cm, so the EDID
+    // under-reports by ~1.6 %. That inflates the panel's computed PPI and
+    // makes windows land ~1.7 % too small after a drag to the denser panel.
     private static readonly Dictionary<string, double> KnownEdidWidthCorrections =
         new(StringComparer.OrdinalIgnoreCase)
     {
         ["HIV0160"] = 30.2,
+        ["BOE0A07"] = 34.53,
     };
 
     private static double GetEdidWidthCm(string deviceName)
