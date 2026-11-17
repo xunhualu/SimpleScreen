@@ -202,6 +202,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     // channels are always compliant; DDC/CI ones are probed once at startup.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _writeCompliant = new(StringComparer.OrdinalIgnoreCase);
 
+    // One physical panel wired over two cables (HDMI + Type-C) appears as two
+    // GDI devices. Both links must stay in _brightnessMonitors (writes go to
+    // every link), but the UI shows ONE row per physical panel. CollapseDual-
+    // LinkCardsAsync fills this map: hidden device -> visible device. Empty =
+    // no merging. Keyed by GDI name so PeakNitsFor / peaks / status all agree.
+    private readonly Dictionary<string, string> _dualLinkVisibleDevice =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The representative (visible) GDI device for a possibly hidden link.</summary>
+    private string VisibleDeviceOf(string device) =>
+        _dualLinkVisibleDevice.TryGetValue(device, out var visible) ? visible : device;
+
     // ── Link watchdog state ────────────────────────────────────────────
     //
     // Snapshot of the active monitor topology (GDI name + panel model) as
@@ -1020,8 +1032,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             HasBrightnessControl = list.Count > 0;
             _brightnessReady = true;
             _lastAppliedPercent.Clear();
-            RebuildBrightnessPeaks();
+            // Build details first: it collapses HDMI+Type-C links of one panel
+            // and fills _dualLinkVisibleDevice. RebuildBrightnessPeaks relies on
+            // that map to show ONE peak row per physical panel (not per cable).
             await BuildMonitorDetailsAsync(monitors);
+            RebuildBrightnessPeaks();
 
             // Probe each panel for real write support in the background — the
             // sync loop must not stall on it (a probe takes up to ~1.5 s per
@@ -1144,8 +1159,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private int PeakNitsFor(BrightnessService.BrightnessMonitor bm)
     {
+        var device = VisibleDeviceOf(bm.Monitor.DeviceName);
         var entry = BrightnessPeaks.FirstOrDefault(p =>
-            string.Equals(p.DeviceName, bm.Monitor.DeviceName, StringComparison.OrdinalIgnoreCase));
+            string.Equals(p.DeviceName, device, StringComparison.OrdinalIgnoreCase));
         return entry?.PeakNits ?? BrightnessPeakEntry.DefaultPeakNits;
     }
 
@@ -1396,21 +1412,31 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
+        // A dual-link panel is one physical screen shown as one row, so the
+        // summary/status must count and list it once (not once per cable).
+        var physicalBrightnessDevices = _brightnessMonitors
+            .Where(b => string.Equals(VisibleDeviceOf(b.Monitor.DeviceName),
+                                      b.Monitor.DeviceName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
         if (reads == null || reads.Count == 0)
         {
             BrightnessStatus = LocalizationService.Format(
                 "Brightness_MonitorSummary",
-                _brightnessMonitors.Count,
-                string.Join(", ", _brightnessMonitors.Select(b => b.Transport).Distinct()));
+                physicalBrightnessDevices.Count,
+                string.Join(", ", physicalBrightnessDevices.Select(b => b.Transport).Distinct()));
         }
         else
         {
-            BrightnessStatus = string.Join("  ·  ", reads.Select(r =>
-                AbsoluteBrightnessSync
-                    ? LocalizationService.Format("Brightness_StatusItemNits",
-                        r.Bm.Monitor.FriendlyName, r.Value,
-                        (int)Math.Round(NitsOf(r.Bm, r.Value)))
-                    : $"{r.Bm.Monitor.FriendlyName}: {r.Value}%"));
+            BrightnessStatus = string.Join("  ·  ", reads
+                .Where(r => string.Equals(VisibleDeviceOf(r.Bm.Monitor.DeviceName),
+                                          r.Bm.Monitor.DeviceName, StringComparison.OrdinalIgnoreCase))
+                .Select(r =>
+                    AbsoluteBrightnessSync
+                        ? LocalizationService.Format("Brightness_StatusItemNits",
+                            r.Bm.Monitor.FriendlyName, r.Value,
+                            (int)Math.Round(NitsOf(r.Bm, r.Value)))
+                        : $"{r.Bm.Monitor.FriendlyName}: {r.Value}%"));
         }
     }
 
@@ -1425,13 +1451,24 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         BrightnessPeaks.Clear();
         foreach (var bm in _brightnessMonitors)
         {
+            // A dual-link panel is two GDI devices (HDMI + Type-C) but one
+            // physical screen: show a single editable peak row under the
+            // visible link's name. Writes still target both links (they live
+            // in _brightnessMonitors), so the hidden one inherits this peak.
+            var device = VisibleDeviceOf(bm.Monitor.DeviceName);
+            if (!string.Equals(device, bm.Monitor.DeviceName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (BrightnessPeaks.Any(p =>
+                    string.Equals(p.DeviceName, device, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
             var entry = new BrightnessPeakEntry
             {
-                DeviceName = bm.Monitor.DeviceName,
+                DeviceName = device,
                 DisplayName = PeakRowName(bm.Monitor)
             };
 
-            if (savedPeaks.TryGetValue(bm.Monitor.DeviceName, out var nits) && nits > 0)
+            if (savedPeaks.TryGetValue(device, out var nits) && nits > 0)
                 entry.PeakNits = nits;
 
             // Assigned after the seed value so loading doesn't write the file.
@@ -1567,6 +1604,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         foreach (var vm in Monitors) { vm.IsHidden = false; vm.IsDualLink = false; }
         foreach (var card in MonitorDetails) { card.IsHidden = false; card.ResetDualLink(); }
+        _dualLinkVisibleDevice.Clear();
 
         var topology = await Task.Run(LinkDiagnosticsService.GetTopology);
         var diag = await Task.Run(() => LinkDiagnosticsService.Collect(monitors));
@@ -1606,6 +1644,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             foreach (var name in names)
             {
                 var hidden = !string.Equals(name, primary, StringComparison.OrdinalIgnoreCase);
+                // Remember hidden -> visible so the brightness page shows one
+                // peak row / status item per physical panel, not one per cable.
+                if (hidden) _dualLinkVisibleDevice[name] = primary;
                 foreach (var vm in Monitors.Where(v =>
                              string.Equals(v.Monitor.DeviceName, name, StringComparison.OrdinalIgnoreCase)))
                     vm.IsHidden = hidden;
