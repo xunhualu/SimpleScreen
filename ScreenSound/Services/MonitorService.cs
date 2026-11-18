@@ -110,7 +110,11 @@ public class MonitorService
 
         // ---- 1) Follow the window we already know -------------------------
         // Alive and on screen → follow it (the user may have dragged it).
-        // Alive but hidden / minimised → stay on the screen it last occupied:
+        // Alive but hidden / minimised → look for a NEW visible main window in
+        // the same process tree first (browsers / QQ Music destroy the old
+        // top-level window and create a fresh one when moved to another screen,
+        // leaving the remembered handle alive but hidden). Only when there is
+        // genuinely no visible window left do we stay on the remembered screen:
         // "I tucked the window away, my music belongs to that screen" — and
         // returning a monitor (rather than null) also lets the router pull the
         // audio back if something else moved the stream meanwhile.
@@ -134,6 +138,31 @@ public class MonitorService
                     mem.DeviceName = live.DeviceName;
                     mem.LastSeenUtc = DateTime.UtcNow;
                     return live;
+                }
+            }
+
+            // Remembered window is hidden/minimised/parked. Before falling back
+            // to its stale screen, check whether the process tree has a *new*
+            // visible main window (the app rebuilt its window on a different
+            // monitor). If so, follow that window and re-anchor the memory to it.
+            // This fixes audio staying on the old screen when a browser or QQ
+            // Music is moved: the old handle lingers hidden while a fresh visible
+            // window appears on the target monitor.
+            var fresh = FindMainWindowForProcess(pidsToTry);
+            if (fresh != IntPtr.Zero && fresh != mem.Hwnd && !IsParkedOffDesktop(fresh))
+            {
+                var freshMonitor = FindMonitorByWindowPosition(fresh, monitors)
+                                   ?? MonitorFromWindowFallback(fresh, monitors);
+                if (freshMonitor != null)
+                {
+                    NativeMethods.GetWindowThreadProcessId(fresh, out uint freshOwner);
+                    _windowMemory[freshOwner] = new WindowMemory
+                    {
+                        Hwnd = fresh,
+                        DeviceName = freshMonitor.DeviceName,
+                        LastSeenUtc = DateTime.UtcNow
+                    };
+                    return freshMonitor;
                 }
             }
 
