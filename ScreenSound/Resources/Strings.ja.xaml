@@ -28,6 +28,7 @@
     <sys:String x:Key="SD_ControlsTitle">画面コントロール（モニターのボタン / OSD メニューの代替）</sys:String>
     <sys:String x:Key="SD_Contrast">コントラスト</sys:String>
     <sys:String x:Key="SD_Volume">スピーカー音量</sys:String>
+    <sys:String x:Key="SD_TypeHint">数値をクリックして直接入力できます。Enter で確定、Esc で取り消し。</sys:String>
     <sys:String x:Key="SD_Input">入力ソース</sys:String>
     <sys:String x:Key="SD_ColorMode">カラーモード</sys:String>
     <sys:String x:Key="SD_Scenario">シーンモード</sys:String>
@@ -103,6 +104,11 @@
     <sys:String x:Key="Home_AudioRouting_Desc">ウィンドウのあるモニターに応じてオーディオ出力を割り当てます</sys:String>
     <sys:String x:Key="Home_WindowScale_Title">ウィンドウサイズシンク</sys:String>
     <sys:String x:Key="Home_WindowScale_Desc">拡大率の異なるモニターへ移動してもウィンドウサイズを維持します</sys:String>
+
+    <sys:String x:Key="SS_SizeHint">各画面のサイズを入力して正確に同期</sys:String>
+    <sys:String x:Key="SS_InchUnit">インチ</sys:String>
+    <sys:String x:Key="SS_PrimaryScreen">メイン画面</sys:String>
+    <sys:String x:Key="SS_SecondaryScreen">サブ画面 {0}</sys:String>
     <sys:String x:Key="Home_Brightness_Title">輝度シンク</sys:String>
     <sys:String x:Key="Home_Brightness_Desc">すべてのモニターの輝度を揃えます</sys:String>
     <sys:String x:Key="Home_Brightness_SliderTip">すべてのモニターの輝度を設定</sys:String>

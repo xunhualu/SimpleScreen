@@ -43,7 +43,31 @@ public partial class MonitorMappingViewModel : ObservableObject
     /// </summary>
     public string DesiredAudioDeviceId { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Set by the owner while it applies a device to this card programmatically
+    /// (startup resolve, hot-plug auto-follow). While true, assigning
+    /// <see cref="SelectedAudioDevice"/> does NOT rewrite DesiredAudioDeviceId —
+    /// that field is the persistent baseline the user chose, and an automatic
+    /// headphone follow must not destroy it.
+    /// </summary>
+    internal bool SuppressIntentUpdate { get; set; }
+
+    /// <summary>
+    /// Suspended by the owner while it rebuilds the ComboBox items, so a
+    /// transient Clear() doesn't look like the user blanking the primary card.
+    /// </summary>
+    internal bool SuspendBlankGuard { get; set; }
+
+    private AudioDeviceInfo? _lastNonBlankDevice;
+
     public string DisplayName => Monitor.DisplayText;
+
+    /// <summary>
+    /// True for the primary display card. Only this card enforces the
+    /// "always have a playback device" / headphone auto-follow policy —
+    /// secondary panels keep the plain user-controlled mapping.
+    /// </summary>
+    public bool IsPrimaryDisplay => Monitor.IsPrimary;
 
     /// <summary>User label chip next to the name ("" when unset).</summary>
     public string Tag => Monitor.Tag;
@@ -84,6 +108,13 @@ public partial class MonitorMappingViewModel : ObservableObject
     public event Action? MappingChanged;
     public event Action<MonitorMappingViewModel>? VolumeChanged;
 
+    /// <summary>
+    /// Raised only for a genuine user selection (not for programmatic
+    /// refresh / auto-follow). The owner uses it to cancel an active
+    /// headphone auto-follow so a manual choice always wins.
+    /// </summary>
+    public event Action<MonitorMappingViewModel>? DevicePickedByUser;
+
     public MonitorMappingViewModel(MonitorInfo monitor, ObservableCollection<AudioDeviceInfo> devices)
     {
         Monitor = monitor;
@@ -92,17 +123,57 @@ public partial class MonitorMappingViewModel : ObservableObject
 
     partial void OnSelectedAudioDeviceChanged(AudioDeviceInfo? value)
     {
-        HasDevice = value != null && !string.IsNullOrEmpty(value.Id);
-        // Capture the user's intent — but only when the change comes with a
-        // real value. The refresh path assigns null when the device the user
-        // wanted is currently unavailable; that must NOT erase the desired ID,
-        // otherwise re-plugging the device can't restore the mapping. User
-        // picks always carry a non-null value (the "(No mapping)" sentinel
-        // included — its Id is "").
-        if (value != null)
-            DesiredAudioDeviceId = value.Id;
+        var blank = value == null || string.IsNullOrEmpty(value.Id);
+
+        // The primary display must always have a playback device. Refuse a
+        // blank result (user picking "(No mapping)"): snap back to the last
+        // real device instead of leaving the dropdown empty. Programmatic
+        // refreshes set SuspendBlankGuard so their transient Clear() is not
+        // mistaken for a user action, and SetDeviceProgrammatically uses
+        // SuppressIntentUpdate to keep the saved base mapping untouched.
+        if (IsPrimaryDisplay && blank && !SuspendBlankGuard && !SuppressIntentUpdate)
+        {
+            var fallback = _lastNonBlankDevice;
+            if (fallback != null && !string.IsNullOrEmpty(fallback.Id))
+            {
+                SuppressIntentUpdate = true;
+                try { SelectedAudioDevice = fallback; }
+                finally { SuppressIntentUpdate = false; }
+                return;
+            }
+        }
+
+        HasDevice = !blank;
+        if (!blank)
+        {
+            _lastNonBlankDevice = value;
+            // Capture the user's intent — but only on a real user pick.
+            // Programmatic headphone auto-follow must not rewrite the base.
+            if (!SuppressIntentUpdate)
+            {
+                DesiredAudioDeviceId = value!.Id;
+                DevicePickedByUser?.Invoke(this);
+            }
+        }
         MappingChanged?.Invoke();
     }
+
+    /// <summary>
+    /// Programmatically point this card at a device without treating it as a
+    /// user choice — keeps the saved baseline mapping intact. Used for the
+    /// primary display's never-blank guarantee and headphone auto-follow.
+    /// </summary>
+    public void SetDeviceProgrammatically(AudioDeviceInfo? device)
+    {
+        SuppressIntentUpdate = true;
+        try { SelectedAudioDevice = device; }
+        finally { SuppressIntentUpdate = false; }
+    }
+
+    /// <summary>
+    /// True when no real device is selected (blank / "(No mapping)").
+    /// </summary>
+    public bool HasNoDevice => SelectedAudioDevice == null || string.IsNullOrEmpty(SelectedAudioDevice.Id);
 
     partial void OnVolumeChanged(int value)
     {
@@ -210,6 +281,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly Dictionary<string, string> _dualLinkVisibleDevice =
         new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Last known dual-link verdict, cached across rebuilds so refresh can show
+    /// the collapsed state IMMEDIATELY instead of flashing all links for the
+    /// ~2 s that the DDC probe takes. Each entry: panel model -> (member GDI
+    /// names, chosen visible link). Cleared only when the topology changes.
+    /// </summary>
+    private sealed record DualLinkVerdict(string Model, HashSet<string> Names, string Primary);
+    private readonly List<DualLinkVerdict> _dualLinkVerdicts = new();
+
     /// <summary>The representative (visible) GDI device for a possibly hidden link.</summary>
     private string VisibleDeviceOf(string device) =>
         _dualLinkVisibleDevice.TryGetValue(device, out var visible) ? visible : device;
@@ -241,6 +321,30 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     // the window passes this to WindowScaleService so the cross-monitor size
     // sync can be ruler-accurate even when a panel's EDID lies about its size.
     private Dictionary<string, double> _monitorWidthCm = new(StringComparer.OrdinalIgnoreCase);
+
+    // Diagonal inches entered per physical panel (model id → inches). Same key
+    // strategy as MonitorWidthCm so both cables of a dual-link panel share one
+    // value. Preferred source of real PPI in WindowScaleService: the user types
+    // the number from the screen's box and no ruler / EDID trust is required.
+    private Dictionary<string, double> _monitorDiagonalInches = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Passed to WindowScaleService so cross-monitor size sync uses
+    /// the user-entered diagonal instead of a possibly-faked EDID width.</summary>
+    public IReadOnlyDictionary<string, double> MonitorDiagonalInchesOverride => _monitorDiagonalInches;
+
+    /// <summary>One editable row per physical screen in the window-size-sync expander.</summary>
+    public ObservableCollection<ScreenSizeEntryViewModel> ScreenSizeEntries { get; } = new();
+
+    [ObservableProperty]
+    private bool _isScreenSizeEditorExpanded;
+
+    /// <summary>Chevron toggle for the screen-diagonal editor.</summary>
+    [RelayCommand]
+    private void ToggleScreenSizeEditor()
+    {
+        IsScreenSizeEditorExpanded = !IsScreenSizeEditorExpanded;
+        if (IsScreenSizeEditorExpanded) RebuildScreenSizeEntries();
+    }
 
     // ── User-defined display names / tags ────────────────────────────────
     //
@@ -336,6 +440,24 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     // DAC routinely fires OnDeviceAdded + OnDeviceStateChanged + OnDefaultDeviceChanged
     // back-to-back; without this we'd rebuild the dropdown three times in a row.
     private static readonly TimeSpan DeviceRefreshDebounce = TimeSpan.FromMilliseconds(300);
+
+    // ── Primary-display output policy: never blank + follow headphones ──────
+    // The primary card always shows a real playback device. DesiredAudioDeviceId
+    // stays the user's "original output" (the fallback), while a newly appeared
+    // endpoint (headphones just plugged) is followed TEMPORARILY and never
+    // written back to the saved intent — so unplugging restores the base.
+    private string? _primaryAutoDeviceId;
+    private readonly HashSet<string> _knownRenderDeviceIds = new(StringComparer.OrdinalIgnoreCase);
+    private string? _lastSystemDefaultDeviceId;
+    private bool _renderDeviceSnapshotReady;
+
+    // A panel wired over two links (e.g. HDMI on the dGPU + Type-C on the iGPU)
+    // exposes two render endpoints with the same EDID name. Windows reports both
+    // as Active, yet only the link the panel is currently listening to carries
+    // audio. The device IDs the user has actually saved in mappings/app pins are
+    // the reliable signal of which twin is the live one; the other is a ghost
+    // and gets hidden from the dropdowns.
+    private readonly HashSet<string> _preferredAudioDeviceIds = new(StringComparer.OrdinalIgnoreCase);
 
     private const string AutoStartRegistryKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string AppRegistryName = "SimpleScreen";
@@ -674,10 +796,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         AudioDevices.Add(new AudioDeviceInfo { Id = "", FriendlyName = LocalizationService.Get("Text_NoMapping") });
 
-        foreach (var device in _audioDeviceService.GetOutputDevices())
+        var currentDevices = _audioDeviceService.GetOutputDevices();
+        foreach (var device in currentDevices)
         {
             AudioDevices.Add(device);
         }
+
+        // Baseline for hot-plug detection. Everything connected at startup is
+        // "already known", so only a genuinely new device triggers auto-follow.
+        // A full Refresh rebuild also goes through here — reseeding is correct
+        // because the set present now is the new normal.
+        _knownRenderDeviceIds.Clear();
+        foreach (var device in currentDevices)
+            _knownRenderDeviceIds.Add(device.Id);
+        _lastSystemDefaultDeviceId = currentDevices.FirstOrDefault(d => d.IsDefault)?.Id;
+        _renderDeviceSnapshotReady = true;
 
         _monitorService.InvalidateCache();
         foreach (var monitor in _monitorService.GetMonitors(forceRefresh: true))
@@ -685,6 +818,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             var vm = new MonitorMappingViewModel(monitor, AudioDevices);
             vm.MappingChanged += OnMappingChanged;
             vm.VolumeChanged += OnVolumeChanged;
+            vm.DevicePickedByUser += OnDevicePickedByUser;
             Monitors.Add(vm);
         }
 
@@ -694,6 +828,112 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         // Names/tags are stored per identity key and applied onto the freshly
         // enumerated MonitorInfo instances (which start out blank).
         ApplyCustomMonitorNames();
+
+        // Brand-new cards all start visible. Replay the last known dual-link
+        // verdict synchronously so a refresh never flashes every cable as a
+        // separate card before the (slow) async probe catches up.
+        ApplyCachedDualLinkState();
+    }
+
+    /// <summary>
+    /// Applies the cached <see cref="_dualLinkVerdicts"/> onto the CURRENT card
+    /// collections with no I/O — safe to call repeatedly and from a rebuild.
+    /// This is the instant path; <see cref="CollapseDualLinkCardsAsync"/> is the
+    /// authoritative path that refreshes the verdict from live topology.
+    /// </summary>
+    private void ApplyCachedDualLinkState()
+    {
+        foreach (var vm in Monitors) { vm.IsHidden = false; vm.IsDualLink = false; }
+        foreach (var card in MonitorDetails) { card.IsHidden = false; card.ResetDualLink(); }
+        _dualLinkVisibleDevice.Clear();
+
+        foreach (var verdict in _dualLinkVerdicts)
+        {
+            foreach (var name in verdict.Names)
+            {
+                var hidden = !string.Equals(name, verdict.Primary, StringComparison.OrdinalIgnoreCase);
+                if (hidden) _dualLinkVisibleDevice[name] = verdict.Primary;
+                foreach (var vm in Monitors.Where(v =>
+                             string.Equals(v.Monitor.DeviceName, name, StringComparison.OrdinalIgnoreCase)))
+                    vm.IsHidden = hidden;
+                foreach (var card in MonitorDetails.Where(c =>
+                             string.Equals(c.Monitor.DeviceName, name, StringComparison.OrdinalIgnoreCase)))
+                    card.IsHidden = hidden;
+            }
+
+            var visible = MonitorDetails.FirstOrDefault(c =>
+                string.Equals(c.Monitor.DeviceName, verdict.Primary, StringComparison.OrdinalIgnoreCase));
+            visible?.SetDualLink();
+            foreach (var vm in Monitors.Where(v =>
+                         string.Equals(v.Monitor.DeviceName, verdict.Primary, StringComparison.OrdinalIgnoreCase)))
+                vm.IsDualLink = true;
+        }
+
+        // The set of visible physical screens just settled — keep the diagonal
+        // editor's rows in sync (one per visible panel, dual-link collapsed).
+        RebuildScreenSizeEntries();
+    }
+
+    // ── Screen diagonal editor (window-size sync) ────────────────────────
+    //
+    // Rebuilt from the visible (non-hidden) monitor cards so it always mirrors
+    // the physical screens the user actually sees: one primary + N secondary.
+    // Dual-link cables of a single panel share a model id, so they collapse to
+    // one row automatically. Values live in _monitorDiagonalInches keyed by
+    // that model id and are persisted on every edit.
+
+    /// <summary>
+    /// Rebuilds the editable diagonal rows from the current visible monitors.
+    /// Safe to call repeatedly; keeps entered values via the model-keyed dict.
+    /// </summary>
+    private void RebuildScreenSizeEntries()
+    {
+        var visible = Monitors.Where(m => m.IsCardVisible).ToList();
+        if (visible.Count == 0) return;
+
+        // Preserve any in-progress rows when the set of screens hasn't changed
+        // (e.g. a refresh that only altered DPI), so a currently-focused text
+        // box is not torn down mid-edit.
+        var keys = string.Join("|", visible
+            .Select(m => WindowScaleService.GetMonitorModel(m.Monitor.DeviceName) ?? m.Monitor.DeviceName)
+            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase));
+        if (keys == _screenSizeEntryKey && ScreenSizeEntries.Count > 0) return;
+        _screenSizeEntryKey = keys;
+
+        ScreenSizeEntries.Clear();
+        foreach (var m in visible.OrderByDescending(m => m.Monitor.IsPrimary))
+        {
+            var model = WindowScaleService.GetMonitorModel(m.Monitor.DeviceName) ?? m.Monitor.DeviceName;
+            _monitorDiagonalInches.TryGetValue(model, out var inches);
+
+            var label = m.Monitor.IsPrimary
+                ? LocalizationService.Get("SS_PrimaryScreen")
+                : string.Format(LocalizationService.Get("SS_SecondaryScreen"),
+                    ScreenSizeEntries.Count); // 1-based among secondary rows
+
+            ScreenSizeEntries.Add(new ScreenSizeEntryViewModel(
+                model,
+                label,
+                $"{m.Monitor.Width}×{m.Monitor.Height}",
+                m.Monitor.IsPrimary,
+                inches,
+                (key, value) => _monitorDiagonalInches[key] = value,
+                SaveSettings));
+        }
+    }
+    private string _screenSizeEntryKey = string.Empty;
+
+    /// <summary>Re-localises row labels after a language switch without rebuilding
+    /// the rows (which would drop a text box that currently has focus).</summary>
+    private void RefreshScreenSizeEntryLabels()
+    {
+        var secondary = 0;
+        foreach (var entry in ScreenSizeEntries)
+        {
+            entry.DisplayName = entry.IsPrimary
+                ? LocalizationService.Get("SS_PrimaryScreen")
+                : string.Format(LocalizationService.Get("SS_SecondaryScreen"), ++secondary);
+        }
     }
 
     // ── User-defined display names / tags ────────────────────────────────
@@ -790,23 +1030,127 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    // Generic endpoint labels are shared by unrelated physical devices (two
+    // different USB headsets are both just "耳机"). Never collapse those —
+    // only monitor-named endpoints (e.g. "QHD (NVIDIA High Definition Audio)")
+    // can be twin render links of one panel.
+    private static readonly HashSet<string> GenericEndpointNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "耳机", "扬声器", "麦克风", "线路输入", "耳机麦克风",
+        "Headphones", "Speakers", "Microphone", "Headset", "Line In"
+    };
+
+    private static string EndpointGroupKey(string friendlyName)
+    {
+        var name = friendlyName ?? string.Empty;
+        var i = name.IndexOf(" (", StringComparison.Ordinal);
+        if (i > 0) name = name[..i];
+        return name.Trim();
+    }
+
+    /// <summary>
+    /// Rebuild the set of device IDs the user has committed to (monitor maps +
+    /// per-app pins). Saved IDs mark the live link of a dual-link panel; unsaved
+    /// twins are hidden so the dropdown doesn't offer a device that can't play.
+    /// </summary>
+    private void RefreshPreferredDeviceIds(AppSettings settings)
+    {
+        _preferredAudioDeviceIds.Clear();
+        foreach (var mapping in settings.Mappings)
+            if (!string.IsNullOrWhiteSpace(mapping.AudioDeviceId))
+                _preferredAudioDeviceIds.Add(mapping.AudioDeviceId);
+        foreach (var kvp in settings.AppOverrides)
+            if (!string.IsNullOrWhiteSpace(kvp.Value))
+                _preferredAudioDeviceIds.Add(kvp.Value);
+    }
+
+    /// <summary>
+    /// Collapse twin endpoints of the same physical panel. Windows exposes one
+    /// render endpoint per link (HDMI/DP on each GPU) and marks them all Active,
+    /// but only one link is actually carrying the panel's audio. Once the user
+    /// has chosen one of them, keep that one and drop the ghost. Panels the user
+    /// hasn't picked yet keep all options so the choice remains available.
+    /// </summary>
+    private List<AudioDeviceInfo> FilterDuplicateDisplayEndpoints(IReadOnlyList<AudioDeviceInfo> devices)
+    {
+        var kept = new List<AudioDeviceInfo>(devices.Count);
+        foreach (var group in devices.GroupBy(d => EndpointGroupKey(d.FriendlyName)))
+        {
+            var items = group.ToList();
+            if (items.Count < 2 || GenericEndpointNames.Contains(group.Key))
+            {
+                kept.AddRange(items);
+                continue;
+            }
+
+            var preferred = items.Where(d => _preferredAudioDeviceIds.Contains(d.Id)).ToList();
+            kept.AddRange(preferred.Count > 0 ? preferred : items);
+        }
+        return kept;
+    }
+
+    /// <summary>
+    /// Rebuild <see cref="AudioDevices"/> from the service with the ghost
+    /// endpoints filtered out. Used when the saved mappings become known after
+    /// the initial device list was already built.
+    /// </summary>
+    private void RebuildAudioDeviceList()
+    {
+        var devices = FilterDuplicateDisplayEndpoints(_audioDeviceService.GetOutputDevices());
+        AudioDevices.Clear();
+        AudioDevices.Add(new AudioDeviceInfo { Id = string.Empty, FriendlyName = LocalizationService.Get("Text_NoMapping") });
+        foreach (var device in devices)
+            AudioDevices.Add(device);
+        DeviceCount = AudioDevices.Count - 1;
+    }
+
+    /// <summary>
     /// Rebuilds <see cref="AudioDevices"/> from the current endpoint list while
     /// preserving per-monitor selections wherever the same device ID is still
-    /// present. Devices that disappeared leave their monitor's selection at
-    /// null — the dropdown reflects reality rather than showing a ghost — but
-    /// the desired ID stays on each monitor VM, so re-plugging the device
-    /// restores the mapping on the next refresh. Must be called on the UI thread.
+    /// present. Secondary panels behave as before (a vanished device leaves the
+    /// card blank, intent preserved for re-plug). The <b>primary</b> display is
+    /// special: its dropdown is never left blank, and a newly connected device
+    /// (headphones) is followed temporarily until it is unplugged, at which
+    /// point the user's original output is restored. Must run on the UI thread.
     /// </summary>
     private void RefreshAudioDevicesPreservingSelections()
     {
-        // Snapshot the user's intent (DesiredAudioDeviceId), not the live
-        // SelectedAudioDevice — otherwise an unplug-then-replug cycle erases
-        // the mapping: the unplug refresh nulls SelectedAudioDevice, and the
-        // replug refresh would then snapshot string.Empty and have nothing to
-        // restore. Snapshotting intent makes the round-trip lossless.
+        // Snapshot intent (DesiredAudioDeviceId), not the live selection — an
+        // unplug/replug round-trip must not erase the saved mapping.
         var desiredByMonitor = Monitors.ToDictionary(
             m => m.Monitor.DeviceName,
             m => m.DesiredAudioDeviceId);
+
+        // Ghost twin links of a dual-link panel are hidden from the dropdown.
+        var current = FilterDuplicateDisplayEndpoints(_audioDeviceService.GetOutputDevices());
+
+        // A device that wasn't in the last snapshot is a real plug-in event.
+        // Follow it on the primary display; the FIRST snapshot at app start is
+        // only a baseline, so devices already connected then are not "new".
+        var appearedId = DetectPluggedHeadphone(current);
+        if (appearedId != null)
+            _primaryAutoDeviceId = appearedId;
+
+        if (appearedId == null)
+        {
+            // Some headsets (or 3.5mm jacks on an existing endpoint) don't add
+            // a new endpoint — Windows just moves the system default to them.
+            // Treat that flip as a plug-in too.
+            var defaultNow = current.FirstOrDefault(d => d.IsDefault)?.Id;
+            if (_lastSystemDefaultDeviceId != null && defaultNow != null
+                && !string.Equals(defaultNow, _lastSystemDefaultDeviceId, StringComparison.OrdinalIgnoreCase))
+            {
+                var newDefault = current.FirstOrDefault(d => d.Id == defaultNow);
+                if (newDefault != null && LooksLikeHeadset(newDefault.FriendlyName))
+                    _primaryAutoDeviceId = defaultNow;
+            }
+        }
+
+        _knownRenderDeviceIds.Clear();
+        foreach (var device in current)
+            _knownRenderDeviceIds.Add(device.Id);
+        _lastSystemDefaultDeviceId = current.FirstOrDefault(d => d.IsDefault)?.Id;
+        _renderDeviceSnapshotReady = true;
 
         // _isLoading suppresses SaveSettings while we mutate selections
         // programmatically — a hot-plug must not overwrite the user's saved
@@ -814,9 +1158,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _isLoading = true;
         try
         {
+            foreach (var m in Monitors)
+                m.SuspendBlankGuard = true;
+
             AudioDevices.Clear();
             AudioDevices.Add(new AudioDeviceInfo { Id = string.Empty, FriendlyName = LocalizationService.Get("Text_NoMapping") });
-            foreach (var device in _audioDeviceService.GetOutputDevices())
+            foreach (var device in current)
                 AudioDevices.Add(device);
 
             DeviceCount = AudioDevices.Count - 1;
@@ -826,15 +1173,24 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 if (!desiredByMonitor.TryGetValue(monitorVm.Monitor.DeviceName, out var desiredId))
                     continue;
 
-                // Match by Id (not reference) — AudioDeviceInfo is rebuilt each
-                // refresh. If the device is gone, FirstOrDefault returns null;
-                // the OnSelectedAudioDeviceChanged guard keeps DesiredAudioDeviceId
-                // intact in that case so a future refresh can still resolve it.
-                monitorVm.SelectedAudioDevice = AudioDevices.FirstOrDefault(d => d.Id == desiredId);
+                if (!monitorVm.IsPrimaryDisplay)
+                {
+                    // Secondary panels: preserve the old behaviour — match by
+                    // Id, a missing device leaves the card blank but keeps intent.
+                    monitorVm.SelectedAudioDevice = AudioDevices.FirstOrDefault(d => d.Id == desiredId);
+                    continue;
+                }
+
+                // Primary: always resolve to a real device. Set programmatically
+                // so auto-following a headset never rewrites the saved base ID.
+                var target = ResolvePrimaryTarget(desiredId, current);
+                monitorVm.SetDeviceProgrammatically(target);
             }
         }
         finally
         {
+            foreach (var m in Monitors)
+                m.SuspendBlankGuard = false;
             _isLoading = false;
         }
 
@@ -853,12 +1209,84 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         RefreshAssignedVolumes();
     }
 
+    /// <summary>
+    /// Picks the device a user most likely just plugged in. A single newcomer
+    /// is unambiguous; when several arrive at once we only follow one if its
+    /// name looks like a headset, otherwise we refuse to guess (avoids a driver
+    /// restarting its virtual device and stealing the primary output).
+    /// </summary>
+    private string? DetectPluggedHeadphone(List<AudioDeviceInfo> current)
+    {
+        if (!_renderDeviceSnapshotReady) return null;
+
+        // Software enhancers (FxSound) can restart their virtual endpoint and
+        // show up as "new" — ignore them so they can't steal the primary output.
+        var appeared = current
+            .Where(d => !_knownRenderDeviceIds.Contains(d.Id) && !LooksLikeVirtualEnhancer(d.FriendlyName))
+            .ToList();
+        if (appeared.Count == 0) return null;
+        if (appeared.Count == 1) return appeared[0].Id;
+
+        return appeared.FirstOrDefault(d => LooksLikeHeadset(d.FriendlyName))?.Id;
+    }
+
+    private static bool LooksLikeVirtualEnhancer(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        return name.Contains("fxsound", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool LooksLikeHeadset(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        foreach (var key in new[] { "headset", "headphone", "耳机", "耳麦" })
+            if (name.Contains(key, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Primary display target, in priority order: the temporarily followed
+    /// plug-in device (if still present), the user's persistent base mapping,
+    /// the Windows default output, then any real device. Returns null only when
+    /// the machine has no active render endpoint at all.
+    /// </summary>
+    private AudioDeviceInfo? ResolvePrimaryTarget(string baseId, List<AudioDeviceInfo> realDevices)
+    {
+        if (realDevices.Count == 0) return null;
+
+        if (!string.IsNullOrEmpty(_primaryAutoDeviceId))
+        {
+            var auto = realDevices.FirstOrDefault(d => d.Id == _primaryAutoDeviceId);
+            if (auto != null) return auto;
+            // The auto-followed device was unplugged — fall back to the base.
+            _primaryAutoDeviceId = null;
+        }
+
+        if (!string.IsNullOrEmpty(baseId))
+        {
+            var baseDevice = realDevices.FirstOrDefault(d => d.Id == baseId);
+            if (baseDevice != null) return baseDevice;
+        }
+
+        return realDevices.FirstOrDefault(d => d.IsDefault) ?? realDevices[0];
+    }
+
+    private List<AudioDeviceInfo> RealDevicesInDropdown() =>
+        AudioDevices.Where(d => !string.IsNullOrEmpty(d.Id)).ToList();
+
     private void LoadSettings()
     {
         _isLoading = true;
         try
         {
             var settings = _settingsService.Load();
+
+            // The device list was built before settings were read. Now that the
+            // saved mappings identify the live link of dual-link panels, rebuild
+            // it with the ghost twins filtered out. The mapping loop below
+            // re-seeds every card against this new list.
+            RefreshPreferredDeviceIds(settings);
+            RebuildAudioDeviceList();
 
             foreach (var mapping in settings.Mappings)
             {
@@ -870,10 +1298,35 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     // at app start. SelectedAudioDevice only gets set when the
                     // device is actually present right now.
                     monitorVm.DesiredAudioDeviceId = mapping.AudioDeviceId;
-                    var device = AudioDevices.FirstOrDefault(d => d.Id == mapping.AudioDeviceId);
-                    if (device != null)
-                        monitorVm.SelectedAudioDevice = device;
+
+                    if (monitorVm.IsPrimaryDisplay)
+                    {
+                        // Primary must never start blank, even if the saved base
+                        // device is currently unplugged. Fall back to default /
+                        // first available; base intent is preserved for re-plug.
+                        monitorVm.SuspendBlankGuard = true;
+                        try { monitorVm.SetDeviceProgrammatically(
+                            ResolvePrimaryTarget(mapping.AudioDeviceId, RealDevicesInDropdown())); }
+                        finally { monitorVm.SuspendBlankGuard = false; }
+                    }
+                    else
+                    {
+                        var device = AudioDevices.FirstOrDefault(d => d.Id == mapping.AudioDeviceId);
+                        if (device != null)
+                            monitorVm.SelectedAudioDevice = device;
+                    }
                 }
+            }
+
+            // Fresh install (no saved mapping yet): seed the primary card so it
+            // is never blank on the very first launch either.
+            var primaryCard = Monitors.FirstOrDefault(m => m.IsPrimaryDisplay);
+            if (primaryCard != null && primaryCard.HasNoDevice)
+            {
+                primaryCard.SuspendBlankGuard = true;
+                try { primaryCard.SetDeviceProgrammatically(
+                    ResolvePrimaryTarget(string.Empty, RealDevicesInDropdown())); }
+                finally { primaryCard.SuspendBlankGuard = false; }
             }
 
             AutoStartWithWindows = settings.AutoStartWithWindows;
@@ -944,6 +1397,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _windowPixelWidth = settings.WindowPixelWidth;
             _windowPixelHeight = settings.WindowPixelHeight;
             _monitorWidthCm = new Dictionary<string, double>(settings.MonitorWidthCm, StringComparer.OrdinalIgnoreCase);
+            _monitorDiagonalInches = new Dictionary<string, double>(settings.MonitorDiagonalInches, StringComparer.OrdinalIgnoreCase);
+            // LoadDevicesAndMonitors ran before LoadSettings, so the first
+            // RebuildScreenSizeEntries saw an empty inches dict. Force a fresh
+            // build now that saved values are available (same screen set, so
+            // the normal key guard would otherwise skip it and leave 0″ rows).
+            _screenSizeEntryKey = string.Empty;
+            RebuildScreenSizeEntries();
 
             _monitorNames = new Dictionary<string, string>(settings.MonitorCustomNames, StringComparer.OrdinalIgnoreCase);
             _monitorTags = new Dictionary<string, string>(settings.MonitorTags, StringComparer.OrdinalIgnoreCase);
@@ -963,6 +1423,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// A real user pick on the primary display becomes the new base output and
+    /// ends any temporary headphone auto-follow, so the manual choice sticks.
+    /// </summary>
+    private void OnDevicePickedByUser(MonitorMappingViewModel card)
+    {
+        if (!card.IsPrimaryDisplay) return;
+        _primaryAutoDeviceId = null;
+    }
+
     private void OnMappingChanged()
     {
         // During programmatic refreshes (LoadSettings, hot-plug refresh, Refresh
@@ -975,6 +1445,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         PushMappingsToEngine();
         SaveSettings();
+
+        // A manual pick of one twin of a dual-link panel marks it as the live
+        // link; re-read the just-saved settings so the ghost stays hidden on
+        // the next refresh.
+        RefreshPreferredDeviceIds(_settingsService.Load());
+
         RefreshAssignedVolumes();
     }
 
@@ -1253,6 +1729,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
             _lastSyncedBrightness = sliderValue;
             BrightnessValue = sliderValue;
+
+            // Refresh the readout from what we just applied, so it tracks the
+            // slider immediately instead of waiting for the next poll. At this
+            // instant the commanded values are the truth — the hardware
+            // readback is still the pre-apply level (and frozen outright on a
+            // write-unreliable panel), so feeding the raw sample back here
+            // would briefly show the old number.
+            var appliedReads = new List<(BrightnessService.BrightnessMonitor Bm, int Value)>();
+            foreach (var bm in _brightnessMonitors)
+                if (percents.TryGetValue(bm.Monitor.DeviceName, out var p))
+                    appliedReads.Add((bm, p));
+            UpdateBrightnessStatus(appliedReads);
         }
         finally
         {
@@ -1287,8 +1775,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             // Panels that ignore writes never participate in the decisions
             // below: their level is frozen at whatever the firmware keeps, and
             // reading it as "drift" would drag every other panel to it.
+            // A panel with no verdict yet is also excluded — the capability
+            // probe runs in the background and can take several seconds, while
+            // this poll ticks every second. Treating an unprobed panel as
+            // compliant lets its stale readback fire a bogus DRIFT on startup
+            // (e.g. the HIV0160 reporting 90 % while we just applied 0 %).
             var active = reads.Where(r =>
-                !_writeCompliant.TryGetValue(r.Bm.Monitor.DeviceName, out var ok) || ok).ToList();
+                _writeCompliant.TryGetValue(r.Bm.Monitor.DeviceName, out var ok) && ok).ToList();
 
             if (active.Count == 0)
             {
@@ -1432,11 +1925,27 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 .Where(r => string.Equals(VisibleDeviceOf(r.Bm.Monitor.DeviceName),
                                           r.Bm.Monitor.DeviceName, StringComparison.OrdinalIgnoreCase))
                 .Select(r =>
-                    AbsoluteBrightnessSync
+                {
+                    // Some panels (e.g. the HIV0160 DDC/CI link) accept writes
+                    // but report a frozen level on readback. The probe already
+                    // flagged those as write-unsupported for exactly that
+                    // reason, so their readback is not a trustworthy picture
+                    // of what's on screen — show the value we actually told
+                    // the panel to use instead. Otherwise the readout claims
+                    // "90% · 360 nits" while the panel is sitting dark at 0 %,
+                    // which looks like the sync broke when it didn't.
+                    var device = r.Bm.Monitor.DeviceName;
+                    var percent = (!_writeCompliant.TryGetValue(device, out var compliant) || !compliant)
+                                  && _lastAppliedPercent.TryGetValue(device, out var applied)
+                        ? applied
+                        : r.Value;
+
+                    return AbsoluteBrightnessSync
                         ? LocalizationService.Format("Brightness_StatusItemNits",
-                            r.Bm.Monitor.FriendlyName, r.Value,
-                            (int)Math.Round(NitsOf(r.Bm, r.Value)))
-                        : $"{r.Bm.Monitor.FriendlyName}: {r.Value}%"));
+                            r.Bm.Monitor.FriendlyName, percent,
+                            (int)Math.Round(NitsOf(r.Bm, percent)))
+                        : $"{r.Bm.Monitor.FriendlyName}: {percent}%";
+                }));
         }
     }
 
@@ -1570,6 +2079,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         LogBrightness($"DETAILS built cards={MonitorDetails.Count}");
 
+        // Newly built detail cards all start visible. Replay the cached verdict
+        // now so the details page also stays merged while the live probe runs.
+        ApplyCachedDualLinkState();
+
         // Freshly built cards hold monitor instances that don't know the
         // user's names/tags yet.
         ApplyCustomMonitorNames();
@@ -1602,13 +2115,19 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// </summary>
     private async Task CollapseDualLinkCardsAsync(List<MonitorInfo> monitors)
     {
-        foreach (var vm in Monitors) { vm.IsHidden = false; vm.IsDualLink = false; }
-        foreach (var card in MonitorDetails) { card.IsHidden = false; card.ResetDualLink(); }
-        _dualLinkVisibleDevice.Clear();
+        // Do NOT touch card visibility here at the start. A previous version
+        // reset every card to visible, then spent ~2 s probing DDC before
+        // hiding the twin — that produced the visible "3 cards / 2 cards"
+        // flicker on every Refresh. The synchronous ApplyCachedDualLinkState
+        // callers have already put the cards in the correct state; this method
+        // only replaces that verdict once a fresh one is fully computed.
 
         var topology = await Task.Run(LinkDiagnosticsService.GetTopology);
         var diag = await Task.Run(() => LinkDiagnosticsService.Collect(monitors));
 
+        // Compute the entire new verdict set off to local variables first.
+        // No UI state is mutated while these I/O-bound steps are in flight.
+        var newVerdicts = new List<DualLinkVerdict>();
         foreach (var group in topology
                      .Where(t => !string.IsNullOrEmpty(t.Model) && t.Model != "?")
                      .GroupBy(t => t.Model, StringComparer.OrdinalIgnoreCase))
@@ -1622,50 +2141,48 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                              .Distinct().ToList();
             if (techs.Count < 2) continue;   // same cable family = two real panels
 
-            // Prefer the link with a live DDC channel (the selected input).
+            // Prefer the link with a live DDC channel (the selected input). If
+            // the member set is unchanged from the cached verdict, reuse its
+            // primary instead of re-probing — same result, no ~1.5 s VCP stall.
             string? primary = null;
-            foreach (var name in names)
+            var namesSet = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+            var cached = _dualLinkVerdicts.FirstOrDefault(v =>
+                namesSet.SetEquals(v.Names));
+            if (cached is not null)
+                primary = cached.Primary;
+
+            if (primary is null || !namesSet.Contains(primary))
             {
-                var m = monitors.FirstOrDefault(x =>
-                    string.Equals(x.DeviceName, name, StringComparison.OrdinalIgnoreCase));
-                if (m is null) continue;
-                try
+                primary = null;
+                foreach (var name in names)
                 {
-                    if (await _vcpService.GetVcpAsync(m, MonitorInterop.VCP_CODE_BRIGHTNESS) is not null)
+                    var m = monitors.FirstOrDefault(x =>
+                        string.Equals(x.DeviceName, name, StringComparison.OrdinalIgnoreCase));
+                    if (m is null) continue;
+                    try
                     {
-                        primary = name;
-                        break;
+                        if (await _vcpService.GetVcpAsync(m, MonitorInterop.VCP_CODE_BRIGHTNESS) is not null)
+                        {
+                            primary = name;
+                            break;
+                        }
                     }
+                    catch { /* DDC timeouts are expected on the idle link */ }
                 }
-                catch { /* DDC timeouts are expected on the idle link */ }
-            }
-            primary ??= names[0];
-
-            foreach (var name in names)
-            {
-                var hidden = !string.Equals(name, primary, StringComparison.OrdinalIgnoreCase);
-                // Remember hidden -> visible so the brightness page shows one
-                // peak row / status item per physical panel, not one per cable.
-                if (hidden) _dualLinkVisibleDevice[name] = primary;
-                foreach (var vm in Monitors.Where(v =>
-                             string.Equals(v.Monitor.DeviceName, name, StringComparison.OrdinalIgnoreCase)))
-                    vm.IsHidden = hidden;
-                foreach (var card in MonitorDetails.Where(c =>
-                             string.Equals(c.Monitor.DeviceName, name, StringComparison.OrdinalIgnoreCase)))
-                    card.IsHidden = hidden;
+                primary ??= names[0];
             }
 
-            var visible = MonitorDetails.FirstOrDefault(c =>
-                string.Equals(c.Monitor.DeviceName, primary, StringComparison.OrdinalIgnoreCase));
-            if (visible is null) continue;
-
-            visible.SetDualLink();
+            newVerdicts.Add(new DualLinkVerdict(group.Key, namesSet, primary));
             LogBrightness($"DUAL LINK merged model={group.Key} links=[{string.Join(", ", names)}] " +
                           $"techs=[{string.Join(",", techs)}] primary={primary} detailsBadge=on");
-            foreach (var vm in Monitors.Where(v =>
-                         string.Equals(v.Monitor.DeviceName, primary, StringComparison.OrdinalIgnoreCase)))
-                vm.IsDualLink = true;
         }
+
+        // Single atomic swap on the UI thread: publish the new verdicts then
+        // apply them in one pass. There is no intermediate "all visible" frame
+        // between the reset and the hide, so the card count never flickers.
+        _dualLinkVerdicts.Clear();
+        _dualLinkVerdicts.AddRange(newVerdicts);
+        ApplyCachedDualLinkState();
     }
 
     /// <summary>
@@ -2033,6 +2550,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         foreach (var detail in MonitorDetails)
             detail.RefreshDisplayTexts();
 
+        RefreshScreenSizeEntryLabels();
+
         // The device dropdown holds a localised "(No mapping)" entry and
         // AudioDeviceInfo is a plain POCO, so the labels can't be refreshed in
         // place — rebuilding the list is the path that's already proven to
@@ -2053,6 +2572,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             WindowPixelWidth = _windowPixelWidth,
             WindowPixelHeight = _windowPixelHeight,
             MonitorWidthCm = new Dictionary<string, double>(_monitorWidthCm, StringComparer.OrdinalIgnoreCase),
+            MonitorDiagonalInches = new Dictionary<string, double>(_monitorDiagonalInches, StringComparer.OrdinalIgnoreCase),
             AutoStartWithWindows = AutoStartWithWindows,
             MinimizeOnClose = MinimizeOnClose,
             StartMinimized = StartMinimized,
@@ -2258,6 +2778,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         LoadDevicesAndMonitors();
 
+        // Drop ghost twin links of dual-link panels using the IDs the user has
+        // saved (LoadDevicesAndMonitors rebuilt the list from raw endpoints).
+        RebuildAudioDeviceList();
+
         // Re-probe brightness channels — monitor topology may have changed
         // (hot-plug, resolution change), and physical monitor handles go stale.
         _ = InitializeBrightnessAsync();
@@ -2273,7 +2797,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 // Re-seed the desired ID first — LoadDevicesAndMonitors built
                 // brand-new MonitorMappingViewModel instances with empty defaults.
                 monitorVm.DesiredAudioDeviceId = desiredId;
-                monitorVm.SelectedAudioDevice = AudioDevices.FirstOrDefault(d => d.Id == desiredId);
+                if (monitorVm.IsPrimaryDisplay)
+                {
+                    monitorVm.SuspendBlankGuard = true;
+                    try { monitorVm.SetDeviceProgrammatically(
+                        ResolvePrimaryTarget(desiredId, RealDevicesInDropdown())); }
+                    finally { monitorVm.SuspendBlankGuard = false; }
+                }
+                else
+                {
+                    monitorVm.SelectedAudioDevice = AudioDevices.FirstOrDefault(d => d.Id == desiredId);
+                }
             }
 
             // OnMappingChanged is suppressed under _isLoading, so read volumes

@@ -241,8 +241,8 @@ public partial class MainWindow : UiWindow
             var newMonitor = WindowScaleService.FindMonitorByDpi((uint)Math.Round(newDpi.DpiScaleX * 96));
             if (newMonitor != IntPtr.Zero && oldMonitor != IntPtr.Zero && newMonitor != oldMonitor)
             {
-                var oldPpi = WindowScaleService.GetRealPpi(oldMonitor, _viewModel.MonitorWidthCmOverride);
-                var newPpi = WindowScaleService.GetRealPpi(newMonitor, _viewModel.MonitorWidthCmOverride);
+                var oldPpi = WindowScaleService.GetRealPpi(oldMonitor, _viewModel.MonitorWidthCmOverride, _viewModel.MonitorDiagonalInchesOverride);
+                var newPpi = WindowScaleService.GetRealPpi(newMonitor, _viewModel.MonitorWidthCmOverride, _viewModel.MonitorDiagonalInchesOverride);
                 if (oldPpi > 0 && newPpi > 0 && Math.Abs(oldPpi - newPpi) > 0.5)
                 {
                     var densityRatio = newPpi / oldPpi;

@@ -4,6 +4,7 @@
         xmlns:wpfui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:vm="clr-namespace:ScreenSound.ViewModels"
         xmlns:attached="clr-namespace:ScreenSound.Attached"
+        xmlns:controls="clr-namespace:ScreenSound.Controls"
         Title="SimpleScreen"
         Height="720" Width="900"
         MinHeight="560" MinWidth="720"
@@ -42,6 +43,42 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- Editable slider value: looks like plain text, reveals a subtle
+             field only on hover/focus so it is clear the number can be typed. -->
+        <Style TargetType="controls:EditableValueBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+            <Setter Property="SelectionBrush" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}"/>
+                </Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}"/>
+                    <Setter Property="BorderThickness" Value="1"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Bordered variant of the editable value box. Matches the plain
+             peak-nits TextBox: a real field with its unit label OUTSIDE the
+             box, instead of the borderless text look used on the sliders. -->
+        <Style x:Key="BorderedValueBox" TargetType="controls:EditableValueBox"
+               BasedOn="{StaticResource {x:Type controls:EditableValueBox}}">
+            <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+            <Setter Property="Padding" Value="6,2"/>
         </Style>
     </wpfui:UiWindow.Resources>
 
@@ -177,22 +214,90 @@
                             <wpfui:ToggleSwitch IsChecked="{Binding IsRoutingEnabled}"/>
                         </wpfui:CardControl>
 
-                        <!-- Window size sync card -->
-                        <wpfui:CardControl Margin="0,0,0,20">
-                            <wpfui:CardControl.Header>
-                                <StackPanel Orientation="Horizontal">
-                                    <wpfui:SymbolIcon Symbol="ScaleFit24" FontSize="22"
-                                                      Margin="0,0,14,0" VerticalAlignment="Center"
-                                                      Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="{DynamicResource Home_WindowScale_Title}" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="{DynamicResource Home_WindowScale_Desc}" FontSize="11"
-                                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,2,0,0"/>
+                        <!-- Window size sync card. Same white Card shell as brightness sync:
+                             icon | (title + desc + collapsible size editor) | toggle. The screen
+                             diagonal inputs live INSIDE this card so they read as part of it,
+                             not as a stray block floating between cards. -->
+                        <wpfui:Card Margin="0,0,0,20" Padding="16">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <wpfui:SymbolIcon Grid.Column="0" Symbol="ScaleFit24" FontSize="22"
+                                                  Margin="0,0,14,0" VerticalAlignment="Top"
+                                                  Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{DynamicResource Home_WindowScale_Title}" FontSize="14" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{DynamicResource Home_WindowScale_Desc}" FontSize="11"
+                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,2,0,0"/>
+
+                                    <!-- Collapsed chevron: one input per physical screen. Values feed
+                                         real PPI so a panel's faked EDID size no longer matters. -->
+                                    <Button Command="{Binding ToggleScreenSizeEditorCommand}"
+                                            Background="Transparent" BorderThickness="0" Padding="0,6,0,2"
+                                            HorizontalAlignment="Left" Cursor="Hand"
+                                            ToolTip="{DynamicResource SS_SizeHint}">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11"
+                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                       VerticalAlignment="Center" Margin="0,0,8,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                                        <Setter Property="Text" Value="&#xE70D;"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsScreenSizeEditorExpanded}" Value="True">
+                                                                <Setter Property="Text" Value="&#xE70E;"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBlock Text="{DynamicResource SS_SizeHint}" FontSize="11"
+                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+
+                                    <StackPanel Margin="0,4,0,0"
+                                                Visibility="{Binding IsScreenSizeEditorExpanded, Converter={StaticResource BoolToVis}}">
+                                        <ItemsControl ItemsSource="{Binding ScreenSizeEntries}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,3,0,3">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                                                            <TextBlock Text="{Binding DisplayName}" FontSize="11"
+                                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                                       TextTrimming="CharacterEllipsis"/>
+                                                            <TextBlock Text="{Binding ResolutionText}" FontSize="10"
+                                                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                                        </StackPanel>
+                                                        <controls:EditableValueBox Grid.Column="1" Style="{StaticResource BorderedValueBox}"
+                                                                   Value="{Binding Inches, Mode=TwoWay}"
+                                                                   Minimum="10" Maximum="100" Decimals="1" Suffix=""
+                                                                   Width="64" Height="26" FontSize="11"/>
+                                                        <TextBlock Grid.Column="2" Text="{DynamicResource SS_InchUnit}" FontSize="11"
+                                                                   Margin="6,0,0,0" VerticalAlignment="Center"
+                                                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
                                     </StackPanel>
                                 </StackPanel>
-                            </wpfui:CardControl.Header>
-                            <wpfui:ToggleSwitch IsChecked="{Binding IsWindowScaleSyncEnabled}"/>
-                        </wpfui:CardControl>
+
+                                <wpfui:ToggleSwitch Grid.Column="2" IsChecked="{Binding IsWindowScaleSyncEnabled}"
+                                                    VerticalAlignment="Top"/>
+                            </Grid>
+                        </wpfui:Card>
 
                         <!-- Brightness Sync card -->
                         <wpfui:Card Margin="0,0,0,20" Padding="16">
@@ -738,8 +843,12 @@
                                                         <Slider Grid.Column="1" Minimum="0" Maximum="100"
                                                                 Value="{Binding Contrast, Mode=TwoWay}" VerticalAlignment="Center"
                                                                 IsEnabled="{Binding DdcAvailable}"/>
-                                                        <TextBlock Grid.Column="2" Text="{Binding Contrast, StringFormat={}{0}%}" FontSize="12"
-                                                                   VerticalAlignment="Center" TextAlignment="Right"/>
+                                                        <controls:EditableValueBox Grid.Column="2"
+                                                                                   Value="{Binding Contrast, Mode=TwoWay}"
+                                                                                   Minimum="0" Maximum="100" Suffix="%"
+                                                                                   FontSize="12" VerticalAlignment="Center"
+                                                                                   IsEnabled="{Binding DdcAvailable}"
+                                                                                   ToolTip="{DynamicResource SD_TypeHint}"/>
                                                     </Grid>
                                                     <Grid Grid.Column="2">
                                                         <Grid.ColumnDefinitions>
@@ -750,8 +859,11 @@
                                                         <TextBlock Text="{DynamicResource SD_Volume}" FontSize="12" VerticalAlignment="Center"/>
                                                         <Slider Grid.Column="1" Minimum="0" Maximum="100"
                                                                 Value="{Binding SpeakerVolume, Mode=TwoWay}" VerticalAlignment="Center"/>
-                                                        <TextBlock Grid.Column="2" Text="{Binding SpeakerVolume, StringFormat={}{0}%}" FontSize="12"
-                                                                   VerticalAlignment="Center" TextAlignment="Right"/>
+                                                        <controls:EditableValueBox Grid.Column="2"
+                                                                                   Value="{Binding SpeakerVolume, Mode=TwoWay}"
+                                                                                   Minimum="0" Maximum="100" Suffix="%"
+                                                                                   FontSize="12" VerticalAlignment="Center"
+                                                                                   ToolTip="{DynamicResource SD_TypeHint}"/>
                                                     </Grid>
                                                 </Grid>
 
@@ -830,9 +942,18 @@
                                                                           SelectedItem="{Binding SelectedOption}"
                                                                           DisplayMemberPath="Label"
                                                                           Visibility="{Binding ChoiceVisibility}"/>
+                                                                <controls:EditableValueBox Grid.Column="2"
+                                                                                           Value="{Binding Value, Mode=TwoWay}"
+                                                                                           Minimum="0" Maximum="{Binding MaxValue}"
+                                                                                           Suffix=""
+                                                                                           FontSize="12" VerticalAlignment="Center"
+                                                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                                                           Visibility="{Binding SliderVisibility}"
+                                                                                           ToolTip="{DynamicResource SD_TypeHint}"/>
                                                                 <TextBlock Grid.Column="2" Text="{Binding ValueText}" FontSize="12"
                                                                            VerticalAlignment="Center" TextAlignment="Right"
-                                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                                           Visibility="{Binding ChoiceVisibility}"/>
                                                             </Grid>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
@@ -882,9 +1003,12 @@
                                                             Minimum="4000" Maximum="9300"
                                                             SmallChange="100" LargeChange="500" TickFrequency="100" IsSnapToTickEnabled="True"
                                                             Value="{Binding ColorTemp, Mode=TwoWay}"/>
-                                                    <TextBlock Grid.Column="2" Text="{Binding ColorTempText}" FontSize="12"
-                                                               VerticalAlignment="Center" TextAlignment="Right"
-                                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                    <controls:EditableValueBox Grid.Column="2"
+                                                                               Value="{Binding ColorTemp, Mode=TwoWay}"
+                                                                               Minimum="4000" Maximum="9300" Suffix="K"
+                                                                               FontSize="12" VerticalAlignment="Center"
+                                                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                                               ToolTip="{DynamicResource SD_TypeHint}"/>
                                                 </Grid>
                                                 <Grid Grid.Column="2">
                                                     <Grid.ColumnDefinitions>
@@ -895,9 +1019,12 @@
                                                     <TextBlock Text="{DynamicResource SD_EyeCareLevel}" FontSize="12" VerticalAlignment="Center"/>
                                                     <Slider Grid.Column="1" Minimum="0" Maximum="100" VerticalAlignment="Center"
                                                             Value="{Binding EyeCare, Mode=TwoWay}"/>
-                                                    <TextBlock Grid.Column="2" Text="{Binding EyeCareText}" FontSize="12"
-                                                               VerticalAlignment="Center" TextAlignment="Right"
-                                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                    <controls:EditableValueBox Grid.Column="2"
+                                                                               Value="{Binding EyeCare, Mode=TwoWay}"
+                                                                               Minimum="0" Maximum="100" Suffix="%"
+                                                                               FontSize="12" VerticalAlignment="Center"
+                                                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                                               ToolTip="{DynamicResource SD_TypeHint}"/>
                                                 </Grid>
                                             </Grid>
 

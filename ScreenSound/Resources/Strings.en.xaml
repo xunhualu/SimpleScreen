@@ -28,6 +28,7 @@
     <sys:String x:Key="SD_ControlsTitle">Display controls (replaces the monitor's own buttons / OSD)</sys:String>
     <sys:String x:Key="SD_Contrast">Contrast</sys:String>
     <sys:String x:Key="SD_Volume">Speaker volume</sys:String>
+    <sys:String x:Key="SD_TypeHint">Click the number to type a value. Enter to apply, Esc to cancel.</sys:String>
     <sys:String x:Key="SD_Input">Input source</sys:String>
     <sys:String x:Key="SD_ColorMode">Color mode (preset)</sys:String>
     <sys:String x:Key="SD_Scenario">Scene mode</sys:String>
@@ -103,6 +104,11 @@
     <sys:String x:Key="Home_AudioRouting_Desc">Route audio based on monitor placement</sys:String>
     <sys:String x:Key="Home_WindowScale_Title">Window Size Sync</sys:String>
     <sys:String x:Key="Home_WindowScale_Desc">Keep the window the same size on monitors with a different scale</sys:String>
+
+    <sys:String x:Key="SS_SizeHint">Enter each screen size for exact sync</sys:String>
+    <sys:String x:Key="SS_InchUnit">in</sys:String>
+    <sys:String x:Key="SS_PrimaryScreen">Primary screen</sys:String>
+    <sys:String x:Key="SS_SecondaryScreen">Secondary {0}</sys:String>
     <sys:String x:Key="Home_Brightness_Title">Brightness Sync</sys:String>
     <sys:String x:Key="Home_Brightness_Desc">Keep all monitors at the same brightness</sys:String>
     <sys:String x:Key="Home_Brightness_SliderTip">Set brightness on every monitor</sys:String>

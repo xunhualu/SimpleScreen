@@ -28,6 +28,7 @@
     <sys:String x:Key="SD_ControlsTitle">屏幕控制（替代屏幕按钮 / OSD 菜单）</sys:String>
     <sys:String x:Key="SD_Contrast">对比度</sys:String>
     <sys:String x:Key="SD_Volume">扬声器音量</sys:String>
+    <sys:String x:Key="SD_TypeHint">点击数字可直接输入数值，回车确认，Esc 取消。</sys:String>
     <sys:String x:Key="SD_Input">输入源</sys:String>
     <sys:String x:Key="SD_ColorMode">色彩模式</sys:String>
     <sys:String x:Key="SD_Scenario">情景模式</sys:String>
@@ -103,6 +104,11 @@
     <sys:String x:Key="Home_AudioRouting_Desc">根据窗口所在的显示器分配音频输出</sys:String>
     <sys:String x:Key="Home_WindowScale_Title">窗口大小同步</sys:String>
     <sys:String x:Key="Home_WindowScale_Desc">拖到缩放比例不同的显示器时保持窗口大小不变</sys:String>
+
+    <sys:String x:Key="SS_SizeHint">填写各屏幕尺寸，精确同步</sys:String>
+    <sys:String x:Key="SS_InchUnit">寸</sys:String>
+    <sys:String x:Key="SS_PrimaryScreen">主屏</sys:String>
+    <sys:String x:Key="SS_SecondaryScreen">副屏 {0}</sys:String>
     <sys:String x:Key="Home_Brightness_Title">亮度同步</sys:String>
     <sys:String x:Key="Home_Brightness_Desc">让所有显示器保持相同的亮度</sys:String>
     <sys:String x:Key="Home_Brightness_SliderTip">设置所有显示器的亮度</sys:String>

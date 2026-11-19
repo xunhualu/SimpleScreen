@@ -41,14 +41,19 @@ public static class WindowScaleService
     // tape-measured <paramref name="widthCmOverrides"/> entries correct.
 
     /// <summary>
-    /// Real pixel density of a monitor in pixels per inch. Keyed off the
-    /// monitor's own device ID: native width from MONITORINFOEX ÷ physical
-    /// width, where the physical width comes from the user's tape-measured
-    /// override for that monitor model (if any) and falls back to EDID.
+    /// Real pixel density of a monitor in pixels per inch. Sources, best first:
+    ///   1. the diagonal inches the user entered for this panel model — PPI is
+    ///      sqrt(w²+h²) / diagonal, which needs no ruler, no EDID and no model
+    ///      table, and works for any screen someone plugs in;
+    ///   2. a tape-measured viewable width in cm (legacy override);
+    ///   3. EDID's self-reported width (which some portable panels fake).
     /// Returns 0 when nothing is known — callers then keep the previous
     /// behaviour instead of guessing.
     /// </summary>
-    public static double GetRealPpi(IntPtr hMonitor, IReadOnlyDictionary<string, double>? widthCmOverrides)
+    public static double GetRealPpi(
+        IntPtr hMonitor,
+        IReadOnlyDictionary<string, double>? widthCmOverrides,
+        IReadOnlyDictionary<string, double>? diagonalInchesOverrides = null)
     {
         try
         {
@@ -59,7 +64,16 @@ public static class WindowScaleService
             if (!NativeMethods.GetMonitorInfo(hMonitor, ref info)) return 0;
 
             var nativeWidth = info.rcMonitor.Right - info.rcMonitor.Left;
-            if (nativeWidth <= 0) return 0;
+            var nativeHeight = info.rcMonitor.Bottom - info.rcMonitor.Top;
+            if (nativeWidth <= 0 || nativeHeight <= 0) return 0;
+
+            // Preferred: user-entered diagonal inches. Pixel density is the
+            // length of the resolution's diagonal divided by the physical
+            // diagonal — aspect ratio cancels out, so a square-pixel panel
+            // needs no width/height entry, just the number on its box.
+            var inches = TryGetMeasuredInches(info.szDevice, diagonalInchesOverrides);
+            if (inches is > 0)
+                return Math.Sqrt((double)nativeWidth * nativeWidth + (double)nativeHeight * nativeHeight) / inches.Value;
 
             var widthCm = TryGetMeasuredWidthCm(info.szDevice, widthCmOverrides)
                           ?? GetEdidWidthCm(info.szDevice);
@@ -72,6 +86,14 @@ public static class WindowScaleService
             System.Diagnostics.Debug.WriteLine($"GetRealPpi failed: {ex.Message}");
             return 0;
         }
+    }
+
+    private static double? TryGetMeasuredInches(string deviceName, IReadOnlyDictionary<string, double>? overrides)
+    {
+        if (overrides == null || overrides.Count == 0) return null;
+        var model = GetMonitorModel(deviceName);
+        if (model is null) return null;
+        return overrides.TryGetValue(model, out var inches) && inches > 0 ? inches : null;
     }
 
     /// <summary>
@@ -222,7 +244,12 @@ public static class WindowScaleService
     /// cable/connection the panel is plugged in through (the DISPLAYn number
     /// changes, the model doesn't).
     /// </summary>
-    private static string? GetMonitorModel(string deviceName)
+    /// <summary>
+    /// Stable identity of the panel itself (e.g. "HIV0160") from a
+    /// <c>\\.\DISPLAYn</c> name. Both cables of a dual-link panel resolve to
+    /// the same model, so callers can use it as a per-physical-screen key.
+    /// </summary>
+    public static string? GetMonitorModel(string deviceName)
     {
         try
         {

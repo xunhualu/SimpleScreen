@@ -14,7 +14,7 @@
 ; Version comes from the APP_VERSION env var (set by CI). Fallback for local runs.
 #define MyAppVersion GetEnv("APP_VERSION")
 #if MyAppVersion == ""
-  #define MyAppVersion "2.0.0"
+  #define MyAppVersion "2.1.1"
 #endif
 
 ; Pinned .NET 8 Desktop Runtime download. Bump this on major .NET 8 patch releases.

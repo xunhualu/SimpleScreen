@@ -57,6 +57,18 @@ public class AppSettings
     public Dictionary<string, double> MonitorWidthCm { get; set; } = new();
 
     /// <summary>
+    /// Viewable DIAGONAL size in inches per monitor model (e.g. "HIV0160" → 14),
+    /// keyed the same way as <see cref="MonitorWidthCm"/> so both cables of a
+    /// dual-link panel share one value. The user enters the number printed on
+    /// the screen's box; combined with the resolution Windows reports, the app
+    /// derives real PPI as sqrt(w²+h²) / inches — no ruler, no EDID (which some
+    /// portable panels fake by 10–20 %) and no hardcoded model table needed.
+    /// Takes precedence over <see cref="MonitorWidthCm"/> and EDID in
+    /// <see cref="ScreenSound.Services.WindowScaleService.GetRealPpi"/>.
+    /// </summary>
+    public Dictionary<string, double> MonitorDiagonalInches { get; set; } = new();
+
+    /// <summary>
     /// Physical size of the main window (pixels) as of the last shutdown.
     /// Re-applied on the next launch so restarting on a different-DPI monitor
     /// doesn't change the window's size either. 0 = never recorded.
