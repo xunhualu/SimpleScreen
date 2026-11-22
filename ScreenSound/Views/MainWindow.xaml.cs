@@ -717,11 +717,18 @@ public partial class MainWindow : UiWindow
         {
             handled = true;
             WindowJumpService.MoveForegroundToOtherMonitor();
+            // SetWindowPos doesn't raise EVENT_SYSTEM_MOVESIZEEND, so the
+            // routing engine wouldn't see the window's new monitor until its
+            // 30s heartbeat. Kick an immediate recheck so the app's audio
+            // follows the window right away instead of a noticeable delay.
+            _viewModel.RequestAudioRouteRecheck();
         }
         else if (id == ArrangeHotkeyId)
         {
             handled = true;
             _autoArrangeWatcher.ArrangeNow();
+            // Tiling also relocates windows across monitors — recheck audio too.
+            _viewModel.RequestAudioRouteRecheck();
         }
         return IntPtr.Zero;
     }

@@ -18,23 +18,34 @@ public static class DisplayRotationService
     /// matched (caller should fall back to the GDI route), true on success
     /// and false when the system rejected the request.
     /// </summary>
-    public static bool? TryRotate(string deviceName, bool portrait)
+    public static bool? TryRotate(string deviceName, bool portrait) =>
+        TryRotate(new[] { deviceName }, portrait);
+
+    /// <summary>
+    /// Rotate every active path whose GDI source name is in <paramref name="deviceNames"/>.
+    /// A dual-link panel is two GDI devices for one physical screen; rotating only
+    /// the card's own link does nothing when the panel is showing the other input.
+    /// CCD is a global commit, so all matching links are rebuilt in ONE ApplyPathInfos
+    /// call — calling it twice would rebuild from a stale snapshot and undo the first.
+    /// </summary>
+    public static bool? TryRotate(IEnumerable<string> deviceNames, bool portrait)
     {
         try
         {
+            var names = new HashSet<string>(deviceNames, StringComparer.OrdinalIgnoreCase);
             var rotation = portrait ? DisplayConfigRotation.Rotate90 : DisplayConfigRotation.Identity;
 
             var paths = PathInfo.GetActivePaths(false).ToList();
-            var target = paths.FirstOrDefault(p =>
-                string.Equals(p.DisplaySource.DisplayName, deviceName, StringComparison.OrdinalIgnoreCase));
-            if (target == null) return null;
+            if (!paths.Any(p => names.Contains(p.DisplaySource.DisplayName ?? ""))) return null;
 
-            // Rebuild every path; the rotated one gets a fresh target info that
+            // Rebuild every path; each matching one gets a fresh target info that
             // keeps the signal AND desktop-image data — dropping the desktop
-            // image information makes the whole set invalid.
+            // image information makes the whole set invalid. Non-matching paths
+            // are rebuilt unchanged (ApplyPathInfos needs the whole set).
             var rebuilt = paths.Select(p =>
             {
-                var targets = p.TargetsInfo.Select(t => p != target ? t :
+                if (!names.Contains(p.DisplaySource.DisplayName ?? "")) return p;
+                var targets = p.TargetsInfo.Select(t =>
                     t.IsDesktopImageInformationAvailable
                         ? new PathTargetInfo(t.DisplayTarget, t.SignalInfo, t.DesktopImage, rotation, t.Scaling)
                         : new PathTargetInfo(t.DisplayTarget, t.SignalInfo, rotation, t.Scaling)).ToArray();

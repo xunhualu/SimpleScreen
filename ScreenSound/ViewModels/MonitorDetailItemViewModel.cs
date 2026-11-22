@@ -30,6 +30,14 @@ public sealed class MonitorDetailHost
     public required Action<string, int, int> BroadcastColor { get; init; }
 
     /// <summary>
+    /// All GDI device names of the SAME physical panel (a dual-link panel has
+    /// two). Software color and rotation must reach every link, otherwise a
+    /// control lands on the idle cable and silently does nothing when the
+    /// panel's input source has switched. Returns at least the given name.
+    /// </summary>
+    public required Func<string, IReadOnlyList<string>> LinkedDeviceNames { get; init; }
+
+    /// <summary>
     /// Persists a user-defined name / tag for one monitor. The host owns the
     /// settings dictionaries and re-applies them across all pages.
     /// </summary>
@@ -57,6 +65,7 @@ public partial class MonitorDetailItemViewModel : ObservableObject
     private readonly Func<string, (int, int)> _loadColor;
     private readonly Action<string, int, int> _storeColor;
     private readonly Action<string, int, int> _broadcastColor;
+    private readonly Func<string, IReadOnlyList<string>> _linkedDeviceNames;
     private readonly Action<MonitorInfo, string, string> _saveIdentity;
 
     // ── Facts (read-only) ──
@@ -324,6 +333,7 @@ public partial class MonitorDetailItemViewModel : ObservableObject
         _loadColor = host.LoadColor;
         _storeColor = host.StoreColor;
         _broadcastColor = host.BroadcastColor;
+        _linkedDeviceNames = host.LinkedDeviceNames;
         _saveIdentity = host.SaveIdentity;
         MonitorNumber = monitorNumber;
 
@@ -730,9 +740,18 @@ public partial class MonitorDetailItemViewModel : ObservableObject
     {
         var kelvin = (int)Math.Round(ColorTemp);
         var eye = (int)Math.Round(EyeCare);
-        ColorGainService.Apply(Monitor.DeviceName, kelvin, eye);
+
+        // A dual-link panel is two GDI devices sharing one physical screen.
+        // Gamma ramps are per-device and independent, so write BOTH links:
+        // if the panel has switched its input to the hidden cable, the ramp
+        // on the visible card's link would otherwise go nowhere.
+        var links = _linkedDeviceNames(Monitor.DeviceName);
+        foreach (var name in links)
+            ColorGainService.Apply(name, kelvin, eye);
+
         if (!store) return;
-        _storeColor(Monitor.DeviceName, kelvin, eye);
+        foreach (var name in links)
+            _storeColor(name, kelvin, eye);
         _saveSettings();
 
         // Color sync: mirror this card's values onto the other monitors. The
@@ -780,16 +799,26 @@ public partial class MonitorDetailItemViewModel : ObservableObject
         IsBusy = true;
         try
         {
+            // Both links of a dual-link panel must be rotated in one CCD commit;
+            // otherwise the panel shows the other input unaffected.
+            var links = _linkedDeviceNames(Monitor.DeviceName);
+
             // Preferred: CCD route (same path as the Windows Settings app) —
             // works even when the driver exposes no portrait modes at all.
-            var ccd = DisplayRotationService.TryRotate(Monitor.DeviceName, portrait);
+            var ccd = DisplayRotationService.TryRotate(links, portrait);
 
             // Fallback: classic GDI rotation (needs pre-swapped modes in the
-            // driver's mode list, which many panels never provide).
+            // driver's mode list, which many panels never provide). Try each
+            // link; the one driving the visible input is the one that sticks.
             if (ccd == null)
             {
                 var target = portrait ? DisplayInterop.DMDO_270 : DisplayInterop.DMDO_DEFAULT;
-                ccd = DisplayInterop.SetOrientation(Monitor.DeviceName, target) == DisplayInterop.DISP_CHANGE_SUCCESSFUL;
+                ccd = false;
+                foreach (var name in links)
+                {
+                    if (DisplayInterop.SetOrientation(name, target) == DisplayInterop.DISP_CHANGE_SUCCESSFUL)
+                    { ccd = true; break; }
+                }
             }
 
             IsPortrait = Monitor.Height > Monitor.Width;   // re-derive from actual geometry

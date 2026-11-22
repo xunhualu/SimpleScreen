@@ -12,6 +12,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.Globalization;
 using System.IO;
+using System.Threading;
 using ScreenSound.Interop;
 
 namespace ScreenSound.ViewModels;
@@ -294,6 +295,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private string VisibleDeviceOf(string device) =>
         _dualLinkVisibleDevice.TryGetValue(device, out var visible) ? visible : device;
 
+    /// <summary>
+    /// Every GDI device of the SAME physical panel as <paramref name="device"/>
+    /// (including itself). A dual-link verdict holds both cables under one model;
+    /// controls that target the panel rather than one cable must reach all of them.
+    /// </summary>
+    private IReadOnlyList<string> LinkedDeviceNamesOf(string device)
+    {
+        var verdict = _dualLinkVerdicts.FirstOrDefault(v => v.Names.Contains(device));
+        return verdict is null ? new[] { device } : verdict.Names.ToArray();
+    }
+
     // ── Link watchdog state ────────────────────────────────────────────
     //
     // Snapshot of the active monitor topology (GDI name + panel model) as
@@ -303,6 +315,23 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     // are throttled per model so a flapping cable can't spam the desktop.
     private List<(string Device, string Model)>? _lastTopology;
     private readonly Dictionary<string, DateTime> _linkAlertCooldown = new(StringComparer.OrdinalIgnoreCase);
+
+    // ── Dual-link active-link auto-follow ──────────────────────────────
+    //
+    // Switching a panel's input source (HDMI <-> Type-C) flips which cable's
+    // DDC channel answers, but NOT the topology (both DISPLAYn stay attached),
+    // so the topology watchdog above never sees it. A periodic low-frequency
+    // probe reads brightness on both links of each merged panel and moves the
+    // visible card to whichever link is live. Cheap panels can answer one DDC
+    // read and fail the next, so a new link must win several consecutive probes
+    // before we act — no popup, no card flicker, no UI stall (all off-thread).
+    private int _activeLinkProbeTicks;
+    private const int ActiveLinkProbeEveryTicks = 8;    // 8 × 4 s = ~32 s between probes
+    private const int ActiveLinkConfirmNeeded = 3;      // ~96 s of agreement before switching
+    // panel model -> (candidate live link, consecutive votes).
+    private readonly Dictionary<string, (string Link, int Votes)> _activeLinkCandidates =
+        new(StringComparer.OrdinalIgnoreCase);
+    private int _activeLinkProbeInFlight;   // interlocked guard: never overlap two probes
     private static readonly TimeSpan LinkAlertCooldownWindow = TimeSpan.FromSeconds(90);
 
     [ObservableProperty]
@@ -2026,9 +2055,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// Rebuild the screen-details cards: refresh DDC handles, collect static
     /// facts off-thread, then let each card load its own DDC state lazily.
     /// </summary>
+    // The exact monitor set whose HMONITOR handles back _vcpService's DDC
+    // channels. The active-link probe must use THESE instances (not a fresh
+    // GetMonitors call) or GetVcpAsync finds no channel and always says "dead".
+    private List<MonitorInfo> _vcpMonitors = new();
+
     private async Task BuildMonitorDetailsAsync(List<MonitorInfo> monitors)
     {
         LogBrightness("DETAILS build start");
+        _vcpMonitors = monitors;
         await Task.Run(() => _vcpService.Refresh(monitors));
         LogBrightness("DETAILS vcp refreshed");
 
@@ -2058,6 +2093,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                                  _eyeCare.TryGetValue(name, out var e) ? e : 0),
             StoreColor = (name, k, e) => { _colorKelvin[name] = k; _eyeCare[name] = e; },
             BroadcastColor = BroadcastColor,
+            LinkedDeviceNames = LinkedDeviceNamesOf,
             SaveIdentity = SaveMonitorIdentity
         };
 
@@ -2141,36 +2177,50 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                              .Distinct().ToList();
             if (techs.Count < 2) continue;   // same cable family = two real panels
 
-            // Prefer the link with a live DDC channel (the selected input). If
-            // the member set is unchanged from the cached verdict, reuse its
-            // primary instead of re-probing — same result, no ~1.5 s VCP stall.
+            // Prefer the link with a LIVE DDC channel — that is the port whose
+            // input the panel is actually showing. Both links appear as active
+            // DISPLAYn devices (same EDID model), but only the selected input
+            // answers DDC/CI; the idle cable's physical handle accepts writes
+            // yet nothing reaches the panel. All per-panel controls (gamma
+            // ramp, rotation, brightness) are keyed by DeviceName, so if the
+            // card pins the idle link every control silently lands on nothing.
+            //
+            // A cached primary can go STALE when the user switches the panel's
+            // input source (HDMI <-> Type-C): the member set is unchanged, so
+            // the old code reused it forever and the card stayed bound to a
+            // dead link. Always re-probe DDC liveness for the authoritative
+            // verdict; only the instant ApplyCachedDualLinkState path reuses
+            // the cache. Probe the cached primary first so the common case is
+            // a single fast read in the original order.
             string? primary = null;
             var namesSet = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
             var cached = _dualLinkVerdicts.FirstOrDefault(v =>
                 namesSet.SetEquals(v.Names));
-            if (cached is not null)
-                primary = cached.Primary;
 
-            if (primary is null || !namesSet.Contains(primary))
+            var probeOrder = new List<string>(names);
+            if (cached is not null && namesSet.Contains(cached.Primary))
             {
-                primary = null;
-                foreach (var name in names)
-                {
-                    var m = monitors.FirstOrDefault(x =>
-                        string.Equals(x.DeviceName, name, StringComparison.OrdinalIgnoreCase));
-                    if (m is null) continue;
-                    try
-                    {
-                        if (await _vcpService.GetVcpAsync(m, MonitorInterop.VCP_CODE_BRIGHTNESS) is not null)
-                        {
-                            primary = name;
-                            break;
-                        }
-                    }
-                    catch { /* DDC timeouts are expected on the idle link */ }
-                }
-                primary ??= names[0];
+                probeOrder.Remove(cached.Primary);
+                probeOrder.Insert(0, cached.Primary);
             }
+            foreach (var name in probeOrder)
+            {
+                var m = monitors.FirstOrDefault(x =>
+                    string.Equals(x.DeviceName, name, StringComparison.OrdinalIgnoreCase));
+                if (m is null) continue;
+                try
+                {
+                    if (await _vcpService.GetVcpAsync(m, MonitorInterop.VCP_CODE_BRIGHTNESS) is not null)
+                    {
+                        primary = name;
+                        break;
+                    }
+                }
+                catch { /* DDC timeouts are expected on the idle link */ }
+            }
+            primary ??= (cached is not null && namesSet.Contains(cached.Primary))
+                ? cached.Primary
+                : names[0];
 
             newVerdicts.Add(new DualLinkVerdict(group.Key, namesSet, primary));
             LogBrightness($"DUAL LINK merged model={group.Key} links=[{string.Join(", ", names)}] " +
@@ -2230,6 +2280,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (_disposed) return;
 
+        // Every Nth tick, probe dual-link panels for an input-source switch.
+        // Fire-and-forget on a background thread; the tick itself stays cheap.
+        if (++_activeLinkProbeTicks >= ActiveLinkProbeEveryTicks)
+        {
+            _activeLinkProbeTicks = 0;
+            _ = ProbeActiveLinksAsync();
+        }
+
         List<(string Device, string Model)> topology;
         try
         {
@@ -2286,6 +2344,92 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                         .Select(t => t.Device));
             RaiseLinkAlert("dup:" + kv.Key,
                 string.Format(LocalizationService.Get("LD_Alert_Duplicate"), kv.Key, kv.Value, names));
+        }
+    }
+
+    /// <summary>
+    /// Low-frequency probe of every merged dual-link panel: read brightness on
+    /// both cables; the one that answers DDC is the input the panel is showing.
+    /// A persistent flip (several consecutive probes) rebinds the visible card
+    /// so per-panel controls keep landing on the live cable after an OSD input
+    /// switch. Transient single-read failures never trigger a switch. Runs
+    /// entirely off the UI thread until the final verdict swap.
+    /// </summary>
+    private async Task ProbeActiveLinksAsync()
+    {
+        if (Interlocked.Exchange(ref _activeLinkProbeInFlight, 1) != 0) return;
+        try
+        {
+            // Verdicts with exactly two links are the merged dual-link panels.
+            var verdicts = _dualLinkVerdicts.Where(v => v.Names.Count == 2).ToList();
+            if (verdicts.Count == 0) return;
+
+            // Use the same MonitorInfo instances that back the VCP channels.
+            var monitors = _vcpMonitors;
+            var flips = new List<(DualLinkVerdict Verdict, string Live)>();
+
+            foreach (var v in verdicts)
+            {
+                string? live = null;
+                foreach (var name in v.Names)
+                {
+                    var m = monitors.FirstOrDefault(x =>
+                        string.Equals(x.DeviceName, name, StringComparison.OrdinalIgnoreCase));
+                    if (m is null) continue;
+                    try
+                    {
+                        // A non-null reply means this cable's DDC channel is
+                        // live — i.e. the panel has this input selected.
+                        if (await _vcpService.GetVcpAsync(m, MonitorInterop.VCP_CODE_BRIGHTNESS) is not null)
+                        { live = name; break; }
+                    }
+                    catch { /* dead link: DDC times out, expected */ }
+                }
+
+                if (live is null) continue;              // neither answered: hold state, no vote
+                if (string.Equals(live, v.Primary, StringComparison.OrdinalIgnoreCase))
+                {
+                    _activeLinkCandidates.Remove(v.Model);   // back to the known link: reset
+                    continue;
+                }
+
+                // The other link is answering — accumulate a vote for it.
+                if (_activeLinkCandidates.TryGetValue(v.Model, out var cand) &&
+                    string.Equals(cand.Link, live, StringComparison.OrdinalIgnoreCase))
+                    cand.Votes++;
+                else
+                    cand = (live, 1);
+                _activeLinkCandidates[v.Model] = cand;
+
+                if (cand.Votes >= ActiveLinkConfirmNeeded)
+                    flips.Add((v, live));
+            }
+
+            if (flips.Count == 0) return;
+
+            // Apply on the UI thread in one pass, then refresh each flipped
+            // verdict authoritatively (its DDC probe now confirms the new link).
+            await _dispatcher.InvokeAsync(() =>
+            {
+                foreach (var (verdict, live) in flips)
+                {
+                    var idx = _dualLinkVerdicts.FindIndex(v =>
+                        string.Equals(v.Model, verdict.Model, StringComparison.OrdinalIgnoreCase));
+                    if (idx < 0) continue;
+                    _dualLinkVerdicts[idx] = _dualLinkVerdicts[idx] with { Primary = live };
+                    _activeLinkCandidates.Remove(verdict.Model);
+                    LogBrightness($"DUAL LINK auto-follow model={verdict.Model} primary {verdict.Primary} -> {live}");
+                }
+                ApplyCachedDualLinkState();
+            });
+        }
+        catch (Exception ex)
+        {
+            LogBrightness($"DUAL LINK auto-follow probe failed: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _activeLinkProbeInFlight, 0);
         }
     }
 
@@ -2632,6 +2776,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         if (!_isLoading)
             SaveSettings();
+    }
+
+    /// <summary>
+    /// Runs an audio-routing pass right now. Called by the global jump hotkey
+    /// after it relocates the foreground window: SetWindowPos does not raise
+    /// EVENT_SYSTEM_MOVESIZEEND, so without this the engine would only notice
+    /// the window's new monitor on its 30s heartbeat — the sound followed
+    /// eventually, but felt slow. Triggering here makes the switch immediate
+    /// (the engine already debounces ~150ms, giving the move time to settle).
+    /// Safe no-op when routing is disabled or the engine isn't started.
+    /// </summary>
+    public void RequestAudioRouteRecheck()
+    {
+        if (!IsRoutingEnabled) return;
+        _routingEngine.Trigger();
     }
 
     /// <summary>
